@@ -1,6 +1,7 @@
 # Week3 Homework
 
 ## HTML
+
 ### 1. `index.html`
 * 基本結構標籤：<!DOCTYPE html>, <html>, <head>, <body>，定義 HTML 文件的基本結構。
 * Metadata 標籤：<meta charset="UTF-8">（設定字元編碼）, <meta name="viewport" ...>（設定 viewport，用於響應式設計）。
