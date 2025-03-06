@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天中</title>
+    <link rel="stylesheet" href="css/chat.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="chat-container">
+            <!-- 聊天標頭 -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <div class="status-indicator online"></div>
+                    <span class="stranger-label">陌生人</span>
+                    <span class="matching-tags">音樂, 電影</span>
+                </div>
+                <div class="chat-actions">
+                    <button id="next-chat" class="btn-next">
+                        <i class="fas fa-forward"></i> 下一位
+                    </button>
+                    <button id="end-chat" class="btn-end">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 聊天訊息區 -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="system-message">
+                    <p>已成功連接! 開始聊天吧!</p>
+                </div>
+                
+                <div class="message stranger">
+                    <div class="message-content">
+                        <p>嗨，妳好嗎 :)</p>
+                    </div>
+                    <span class="message-time">14:32</span>
+                </div>
+                
+                <div class="message self">
+                    <div class="message-content">
+                        <p>你好! 我也很高興認識你! 你喜歡什麼樣的音樂跟電影?</p>
+                    </div>
+                    <span class="message-time">14:33</span>
+                </div>
+                
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- 輸入區 -->
+            <div class="chat-input">
+                <textarea id="message-input" placeholder="輸入訊息..." rows="1"></textarea>
+                <div class="input-actions">
+                    <button id="send-message" class="btn-send">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
