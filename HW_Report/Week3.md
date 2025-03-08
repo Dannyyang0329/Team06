@@ -103,7 +103,17 @@
     ```
 
 * 使用媒體查詢 (@media) 針對不同螢幕尺寸調整佈局和元素大小。
-
+    ```css
+    @media screen and (max-width: 768px) {
+        .welcome-buttons {
+            width: 90%;
+        }
+        .welcome-stats {
+            flex-direction: column;
+            gap: 20px;
+        }
+    }
+    ````
 
 ## 3. 組員分工情況
 * 賴佑寧 (25%): HTML, CSS, 版面設計 
