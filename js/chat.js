@@ -1,3 +1,7 @@
+// 移除 import 語句，改用 script 標籤載入的全域變數
+// const React = window.React;
+// const ReactDOM = window.ReactDOM;
+
 document.addEventListener('DOMContentLoaded', function() {
     // 獲取DOM元素
     const messagesContainer = document.getElementById('chat-messages');
@@ -56,7 +60,24 @@ document.addEventListener('DOMContentLoaded', function() {
             const messageId = 'msg-' + Date.now();
             messageEl.id = messageId;
             
-            // 構建消息HTML，包括回覆部分(如果有)
+            // 使用React組件格式
+            const MessageHeader = ({ userSettings }) => {
+                return React.createElement(
+                    'div',
+                    { className: 'message-header' },
+                    React.createElement('img', {
+                        src: userSettings.avatar ? `images/avatar${userSettings.avatar}.png` : 'images/avatar1.png',
+                        className: 'message-avatar'
+                    }),
+                    React.createElement(
+                        'span',
+                        { className: 'message-nickname' },
+                        userSettings.nickname || '你'
+                    )
+                );
+            };
+
+            // 由於目前環境是純JavaScript，仍需要轉換成HTML字串
             let messageHTML = `
                 <div class="message-header">
                     <img src="${userSettings.avatar ? 'images/avatar' + userSettings.avatar + '.png' : 'images/avatar1.png'}" class="message-avatar">
@@ -67,13 +88,6 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 如果是回覆訊息，添加回覆部分，並根據回覆對象添加不同的類別
             if (replyToId && repliedContent) {
-                // const replyClass = isReplyToStranger ? 'replied-message-stranger' : 'replied-message-self';
-                // messageHTML += `
-                //     <div class="replied-message ${replyClass}" data-original-msg="${replyToId}">
-                //         <div class="replied-to">回覆給 ${repliedTo}</div>
-                //         ${repliedContent.length > 50 ? repliedContent.substring(0, 50) + '...' : repliedContent}
-                //     </div>
-                // `;
                 messageHTML += `
                     <div class="replied-message" data-original-msg="${replyToId}">
                         <div class="replied-to">回覆給 ${repliedTo}</div>
