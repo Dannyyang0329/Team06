@@ -67,9 +67,15 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // 如果是回覆訊息，添加回覆部分，並根據回覆對象添加不同的類別
             if (replyToId && repliedContent) {
-                const replyClass = isReplyToStranger ? 'replied-message-stranger' : 'replied-message-self';
+                // const replyClass = isReplyToStranger ? 'replied-message-stranger' : 'replied-message-self';
+                // messageHTML += `
+                //     <div class="replied-message ${replyClass}" data-original-msg="${replyToId}">
+                //         <div class="replied-to">回覆給 ${repliedTo}</div>
+                //         ${repliedContent.length > 50 ? repliedContent.substring(0, 50) + '...' : repliedContent}
+                //     </div>
+                // `;
                 messageHTML += `
-                    <div class="replied-message ${replyClass}" data-original-msg="${replyToId}">
+                    <div class="replied-message" data-original-msg="${replyToId}">
                         <div class="replied-to">回覆給 ${repliedTo}</div>
                         ${repliedContent.length > 50 ? repliedContent.substring(0, 50) + '...' : repliedContent}
                     </div>
@@ -328,7 +334,12 @@ document.addEventListener('DOMContentLoaded', function() {
             messageHTML += `
                     <p>${randomReply}</p>
                 </div>
-                <span class="message-time">${timeString}</span>
+                <div class="message-footer">
+                    <span class="message-time">${timeString}</span>
+                    <div class="message-actions">
+                        <button class="action-button reply-button" data-message-id="${messageId}">回覆</button>
+                    </div>
+                </div>
             `;
             
             messageEl.innerHTML = messageHTML;
@@ -349,6 +360,16 @@ document.addEventListener('DOMContentLoaded', function() {
                             originalMsg.style.backgroundColor = '';
                         }, 2000);
                     }
+                });
+            }
+            
+            // 綁定新增的回覆按鈕事件
+            const replyButton = messageEl.querySelector('.reply-button');
+            if (replyButton) {
+                replyButton.addEventListener('click', function() {
+                    const targetMessageId = this.getAttribute('data-message-id');
+                    const targetMessageContent = messageEl.querySelector('.message-content p').textContent;
+                    replyToMessage(targetMessageId, targetMessageContent, true); // true表示回覆對方的訊息
                 });
             }
             
@@ -472,4 +493,20 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化時重設輸入框高度
     resetTextareaHeight();
+    
+    // 初始化時為現有的對方訊息添加回覆事件
+    function initExistingMessages() {
+        // 為對方訊息添加回覆按鈕事件
+        document.querySelectorAll('.message.stranger .reply-button').forEach(button => {
+            button.addEventListener('click', function() {
+                const messageId = this.getAttribute('data-message-id');
+                const targetMessage = document.getElementById(messageId) || this.closest('.message');
+                const messageContent = targetMessage.querySelector('.message-content p').textContent;
+                replyToMessage(targetMessage.id, messageContent, true); // true表示回覆對方的訊息
+            });
+        });
+    }
+    
+    // 初始化時調用
+    initExistingMessages();
 });

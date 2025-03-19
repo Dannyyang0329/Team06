@@ -179,6 +179,18 @@ body {
     border-bottom-right-radius: 4px;
 }
 
+.message.self .replied-message {
+    background-color: #b1c9d8a8;
+    border-left: 3px solid #b1c9d8;
+    color: #666;
+}
+
+.message.stranger .replied-message {
+    background-color: rgba(52, 152, 219, 0.1);
+    border-left: 3px solid #3498db;
+    color: #666;
+}
+
 /* 訊息底部（時間和操作按鈕） */
 .message-footer {
     display: flex;
@@ -299,7 +311,8 @@ body {
 }
 
 .replied-message .replied-to {
-    color: #3498db;
+    /* color: #3498db; */
+    color: #666666;
     font-weight: 600;
     margin-bottom: 2px;
     font-size: 12px;
@@ -319,18 +332,18 @@ body {
 }
 
 /* 回覆自己的訊息樣式 */
-.replied-message-self {
+/* .replied-message-self {
     background-color: rgba(52, 152, 219, 0.1);
     border-left: 3px solid #3498db;
     color: #666;
-}
+} */
 
 /* 回覆對方的訊息樣式 */
-.replied-message-stranger {
+/* .replied-message-stranger {
     background-color: rgba(230, 126, 34, 0.1);
     border-left: 3px solid #e67e22;
     color: #666;
-}
+} */
 
 .replied-message .replied-to {
     font-weight: 600;
@@ -339,12 +352,12 @@ body {
 }
 
 .replied-message-self .replied-to {
-    color: #3498db;
+    color: #666666;
 }
 
-.replied-message-stranger .replied-to {
+/* .replied-message-stranger .replied-to {
     color: #e67e22;
-}
+} */
 
 /* 回覆預覽樣式 - 基本樣式 */
 .reply-preview {
@@ -364,10 +377,10 @@ body {
 }
 
 /* 回覆給對方的預覽樣式 */
-.reply-to-stranger {
+/* .reply-to-stranger {
     background-color: rgba(230, 126, 34, 0.1);
     border-left: 3px solid #e67e22;
-}
+} */
 
 .reply-content {
     display: flex;
@@ -386,9 +399,9 @@ body {
     color: #3498db;
 }
 
-.reply-to-stranger .reply-to {
+/* .reply-to-stranger .reply-to {
     color: #e67e22;
-}
+} */
 
 .reply-text {
     color: #555;
