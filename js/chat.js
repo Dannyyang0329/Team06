@@ -474,7 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 結束聊天並返回主頁
     function endChat() {
         if (confirm('確定要結束目前的聊天嗎？')) {
-            window.location.href = 'main.html';
+            window.location.href = 'index.html';
         }
     }
     
