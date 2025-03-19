@@ -80,3 +80,10 @@
 - 自動調整輸入框高度 (`input` 事件監聽 `messageInput`)。
 - `resetTextareaHeight()` 確保最大高度限制為 120px。
 - `initExistingMessages()`：為現有訊息綁定回覆按鈕事件。
+
+## 新增 React 組件 - MessageHeader
+- `MessageHeader({ userSettings })`：
+  - 使用 `React.createElement` 動態創建訊息頭部元件。
+  - 顯示用戶頭像 (`userSettings.avatar`)，若無則預設為 `avatar1.png`。
+  - 顯示用戶暱稱 (`userSettings.nickname`)，若無則預設為「你」。
+  - 提高組件化管理，使訊息頭部可重複使用。
