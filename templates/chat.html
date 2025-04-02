@@ -1,0 +1,117 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天中</title>
+    <link rel="stylesheet" href="{% static 'css/chat.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="chat-container">
+            <!-- 聊天標頭 -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <div class="status-indicator online"></div>
+                    <span class="stranger-label">陌生人</span>
+                    <span class="matching-tags">音樂, 電影</span>
+                </div>
+                <div class="chat-actions">
+                    <button id="next-chat" class="btn-next">
+                        <i class="fas fa-forward"></i> 下一位
+                    </button>
+                    <button id="end-chat" class="btn-end">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 用戶資訊 -->
+            <div class="user-info">
+                <span id="user-nickname">你</span>
+                <img id="user-avatar" src="{% static 'images/avatar1.png' %}" alt="Your Avatar">
+            </div>
+
+            <!-- 聊天訊息區 -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="system-message">
+                    <p>已成功連接! 開始聊天吧!</p>
+                </div>
+                
+                <div class="message stranger">
+                    <div class="message-header">
+                        <img src="{% static 'images/avatar2.png' %}" class="message-avatar">
+                        <span class="message-nickname">陌生人</span>
+                    </div>
+                    <div class="message-content">
+                        <p>嗨，妳好嗎 :)</p>
+                    </div>
+                    <div class="message-footer">
+                        <span class="message-time">14:32</span>
+                        <div class="message-actions">
+                            <button class="action-button reply-button" data-message-id="msg-stranger-1">回覆</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="message self" id="msg-initial">
+                    <div class="message-header">
+                        <img id="initial-avatar" src="{% static 'images/avatar1.png' %}" class="message-avatar">
+                        <span id="initial-nickname" class="message-nickname">你</span>
+                    </div>
+                    <div class="message-content">
+                        <p>你好! 我也很高興認識你! 你喜歡什麼樣的音樂跟電影?</p>
+                    </div>
+                    <div class="message-footer">
+                        <span class="message-time">14:33</span>
+                        <div class="message-actions">
+                            <button class="action-button reply-button" data-message-id="msg-initial">回覆</button>
+                            <button class="action-button recall-button" data-message-id="msg-initial">收回</button>
+                            <button class="action-button delete-button" data-message-id="msg-initial">刪除</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="message stranger" id="msg-reply-example">
+                    <div class="message-header">
+                        <img src="{% static 'images/avatar2.png' %}" class="message-avatar">
+                        <span class="message-nickname">陌生人</span>
+                    </div>
+                    <div class="message-content">
+                        <div class="replied-message" data-original-msg="msg-initial">
+                            <div class="replied-to">回覆給 你</div>
+                            你好! 我也很高興認識你! 你喜歡什麼樣的音樂跟電影?
+                        </div>
+                        <p>我喜歡聽流行音樂，最近很喜歡看驚悚片，你呢?</p>
+                    </div>
+                    <div class="message-footer">
+                        <span class="message-time">14:34</span>
+                        <div class="message-actions">
+                            <button class="action-button reply-button" data-message-id="msg-reply-example">回覆</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- 輸入區 -->
+            <div class="chat-input">
+                <div class="input-container">
+                    <textarea id="message-input" placeholder="輸入訊息..." rows="1"></textarea>
+                    <button id="send-message" class="btn-send">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{% static 'js/chat.js' %}"></script>
+</body>
+</html>

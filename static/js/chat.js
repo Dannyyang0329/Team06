@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('user-nickname').innerText = userSettings.nickname;
     }
     if (userSettings.avatar) {
-        document.getElementById('user-avatar').src = `images/avatar${userSettings.avatar}.png`;
+        document.getElementById('user-avatar').src = `/static/images/avatar${userSettings.avatar}.png`;
     }
 
     // 從DOM中移除打字指示器，稍後會在需要時將其添加到適當的位置
@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'div',
                     { className: 'message-header' },
                     React.createElement('img', {
-                        src: userSettings.avatar ? `images/avatar${userSettings.avatar}.png` : 'images/avatar1.png',
+                        src: userSettings.avatar ? `/static/images/avatar${userSettings.avatar}.png` : '/static/images/avatar1.png',
                         className: 'message-avatar'
                     }),
                     React.createElement(
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // 由於目前環境是純JavaScript，仍需要轉換成HTML字串
             let messageHTML = `
                 <div class="message-header">
-                    <img src="${userSettings.avatar ? 'images/avatar' + userSettings.avatar + '.png' : 'images/avatar1.png'}" class="message-avatar">
+                    <img src="${userSettings.avatar ? '/static/images/avatar' + userSettings.avatar + '.png' : '/static/images/avatar1.png'}" class="message-avatar">
                     <span class="message-nickname">${userSettings.nickname || '你'}</span>
                 </div>
                 <div class="message-content">
@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             let messageHTML = `
                 <div class="message-header">
-                    <img src="images/avatar2.png" class="message-avatar">
+                    <img src="/static/images/avatar2.png" class="message-avatar">
                     <span class="message-nickname">陌生人</span>
                 </div>
                 <div class="message-content">
@@ -450,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     messageEl.classList.add('message', 'stranger');
                     messageEl.innerHTML = `
                         <div class="message-header">
-                            <img src="images/avatar2.png" class="message-avatar">
+                            <img src="/static/images/avatar2.png" class="message-avatar">
                             <span class="message-nickname">陌生人</span>
                         </div>
                         <div class="message-content">
@@ -474,7 +474,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // 結束聊天並返回主頁
     function endChat() {
         if (confirm('確定要結束目前的聊天嗎？')) {
-            window.location.href = 'index.html';
+            window.location.href = '/';
         }
     }
     
