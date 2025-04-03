@@ -448,6 +448,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             )
             
             if message:
+                # 獲取回覆訊息的資訊
+                replied_info = await self.get_replied_message_info(message)
+                
                 # 向聊天室群組發送訊息
                 await self.channel_layer.group_send(
                     self.room_group_name,
@@ -459,9 +462,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             'sender_nickname': message.sender.nickname,
                             'sender_avatar': message.sender.avatar,
                             'content': message.content,
-                            'replied_to': str(message.replied_to.id) if message.replied_to else None,
-                            'replied_to_content': message.replied_to.content if message.replied_to else None,
-                            'replied_to_sender': message.replied_to.sender.nickname if message.replied_to else None,
+                            'replied_to': replied_info.get('id') if replied_info else None,
+                            'replied_to_content': replied_info.get('content') if replied_info else None,
+                            'replied_to_sender': replied_info.get('sender') if replied_info else None,
                             'sent_at': message.sent_at.strftime('%H:%M'),
                             'client_id': message_data.get('client_id')  # 返回客戶端ID
                         }
@@ -679,3 +682,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"更新聊天室狀態時發生錯誤: {str(e)}")
             return False
+    
+    @database_sync_to_async
+    def get_replied_message_info(self, message):
+        """安全地獲取回覆訊息的資訊"""
+        if not message.replied_to:
+            return None
+            
+        try:
+            return {
+                'id': str(message.replied_to.id),
+                'content': message.replied_to.content,
+                'sender': message.replied_to.sender.nickname
+            }
+        except Exception as e:
+            logger.error(f"獲取回覆訊息資訊時發生錯誤: {str(e)}")
+            return None
