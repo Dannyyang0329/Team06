@@ -56,6 +56,14 @@ body {
     background-color: #2ecc71;
 }
 
+.status-indicator.waiting {
+    background-color: #f39c12;
+}
+
+.status-indicator.offline {
+    background-color: #e74c3c;
+}
+
 .stranger-label {
     font-weight: bold;
     font-size: 16px;

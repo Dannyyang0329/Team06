@@ -10,9 +10,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const nextChatButton = document.getElementById('next-chat');
     const endChatButton = document.getElementById('end-chat');
     const typingIndicator = document.querySelector('.typing-indicator');
+    const statusIndicator = document.getElementById('status-indicator');
+    const chatPartnerLabel = document.getElementById('chat-partner-label');
+    const matchingTags = document.getElementById('matching-tags');
     
     // 從localStorage中獲取用戶設置
     const userSettings = JSON.parse(localStorage.getItem('userSettings')) || {};
+
+    // 使用 sessionStorage 確保每個分頁都有唯一ID
+    let userId = sessionStorage.getItem('userId');
+    if (!userId) {
+        // 生成包含時間戳的唯一ID
+        const timestamp = new Date().getTime();
+        const random = Math.random().toString(36).substring(2, 10);
+        userId = `user-${timestamp}-${random}`;
+        sessionStorage.setItem('userId', userId);
+    }
+    
+    // 每次打開新的聊天也為此聊天會話生成一個單獨的sessionId
+    const sessionId = 'session_' + Date.now() + Math.random().toString(36).substring(2, 9);
+
+    // WebSocket連接
+    let matchingSocket = null;
+    let chatSocket = null;
+    let currentRoomId = null;
+    let chatPartner = null;
+    let isMatched = false;
 
     // 更新用戶資訊顯示
     if (userSettings.nickname) {
@@ -27,10 +50,180 @@ document.addEventListener('DOMContentLoaded', function() {
         typingIndicator.parentNode.removeChild(typingIndicator);
     }
     
+    // 初始化匹配WebSocket連接
+    function initMatchingSocket() {
+        const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const wsUrl = wsScheme + window.location.host + '/ws/matching/';
+        
+        matchingSocket = new WebSocket(wsUrl);
+        
+        matchingSocket.onopen = function(e) {
+            console.log('匹配WebSocket連接已建立');
+            
+            // 發送開始匹配請求，包含userId但不加入前綴
+            matchingSocket.send(JSON.stringify({
+                action: 'start_matching',
+                user_data: {
+                    user_id: userId,
+                    session_id: sessionId,  // 加入會話ID增加唯一性
+                    nickname: userSettings.nickname || '匿名用戶',
+                    avatar: userSettings.avatar || '1',
+                    mood: userSettings.mood || 'neutral',
+                    gender: userSettings.gender || 'other',
+                    preferredGender: userSettings.preferredGender || 'all',
+                    tags: userSettings.tags || []
+                }
+            }));
+            
+            // 添加系統消息：正在尋找匹配
+            addSystemMessage('正在尋找聊天對象，請耐心等待...');
+        };
+        
+        matchingSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            
+            if (data.action === 'match_found') {
+                // 匹配成功
+                currentRoomId = data.room_id;
+                chatPartner = data.matched_user;
+                isMatched = true;
+                
+                // 顯示匹配成功消息
+                addSystemMessage(`已配對成功！與 ${chatPartner.nickname} 開始聊天吧！`);
+                
+                // 更新聊天頭部信息
+                statusIndicator.classList.remove('waiting');
+                statusIndicator.classList.add('online');
+                chatPartnerLabel.textContent = chatPartner.nickname;
+                
+                // 如果有共同標籤，顯示
+                if (data.common_tags && data.common_tags.length > 0) {
+                    matchingTags.textContent = data.common_tags.join(', ');
+                } else {
+                    matchingTags.style.display = 'none';
+                }
+                
+                // 啟用輸入框和發送按鈕
+                messageInput.disabled = false;
+                sendButton.disabled = false;
+                
+                // 關閉匹配WebSocket
+                matchingSocket.close();
+                
+                // 建立聊天WebSocket連接
+                initChatSocket(currentRoomId);
+            } else if (data.action === 'waiting_for_match') {
+                // 等待匹配
+                addSystemMessage('正在等待其他用戶加入，請耐心等待...');
+            }
+        };
+        
+        matchingSocket.onclose = function(e) {
+            console.log('匹配WebSocket連接已關閉');
+            
+            // 如果沒找到匹配，5秒後重連
+            if (!isMatched) {
+                setTimeout(function() {
+                    addSystemMessage('正在重新尋找聊天對象...');
+                    initMatchingSocket();
+                }, 5000);
+            }
+        };
+        
+        matchingSocket.onerror = function(err) {
+            console.error('匹配WebSocket錯誤:', err);
+            addSystemMessage('連接發生錯誤，請刷新頁面重試。');
+        };
+    }
+    
+    // 初始化聊天WebSocket連接
+    function initChatSocket(roomId) {
+        const wsScheme = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const wsUrl = wsScheme + window.location.host + `/ws/chat/?room=${roomId}`;
+        
+        chatSocket = new WebSocket(wsUrl);
+        
+        chatSocket.onopen = function(e) {
+            console.log('聊天WebSocket連接已建立');
+        };
+        
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            
+            if (data.action === 'new_message') {
+                // 收到新消息
+                const message = data.message;
+                
+                // 如果不是自己發送的消息，顯示
+                if (message.sender_id !== userId) {
+                    receiveMessage(message);
+                }
+            } else if (data.action === 'message_recalled') {
+                // 消息被收回
+                const messageEl = document.getElementById(data.message_id);
+                if (messageEl) {
+                    const messageContent = messageEl.querySelector('.message-content');
+                    messageContent.innerHTML = '<p class="recalled-message">此訊息已收回</p>';
+                    
+                    // 移除操作按鈕
+                    const messageActions = messageEl.querySelector('.message-actions');
+                    if (messageActions) {
+                        messageActions.innerHTML = '';
+                    }
+                }
+            } else if (data.action === 'message_deleted') {
+                // 消息被刪除
+                const messageEl = document.getElementById(data.message_id);
+                if (messageEl) {
+                    messageEl.remove();
+                }
+            } else if (data.action === 'user_left') {
+                // 對方離開聊天
+                if (data.user_id !== userId) {
+                    addSystemMessage(`${chatPartner.nickname} 已離開聊天。`);
+                    
+                    // 顯示對方已離開的狀態
+                    statusIndicator.classList.remove('online');
+                    statusIndicator.classList.add('offline');
+                    
+                    // 禁用輸入框和發送按鈕
+                    messageInput.disabled = true;
+                    sendButton.disabled = true;
+                    
+                    // 提示找新對象
+                    setTimeout(function() {
+                        addSystemMessage('請點擊"下一位"按鈕開始新的聊天。');
+                    }, 2000);
+                }
+            }
+        };
+        
+        chatSocket.onclose = function(e) {
+            console.log('聊天WebSocket連接已關閉');
+            
+            // 如果是因為對方離開而關閉，不要重連
+            if (statusIndicator.classList.contains('offline')) {
+                return;
+            }
+            
+            // 嘗試重連
+            setTimeout(function() {
+                if (currentRoomId) {
+                    initChatSocket(currentRoomId);
+                }
+            }, 3000);
+        };
+        
+        chatSocket.onerror = function(err) {
+            console.error('聊天WebSocket錯誤:', err);
+            addSystemMessage('聊天連接發生錯誤，請刷新頁面重試。');
+        };
+    }
+    
     // 發送訊息函數
     function sendMessage() {
         const message = messageInput.value.trim();
-        if (message) {
+        if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
             // 獲取當前時間
             const now = new Date();
             const hours = String(now.getHours()).padStart(2, '0');
@@ -40,44 +233,28 @@ document.addEventListener('DOMContentLoaded', function() {
             // 檢查是否為回覆訊息
             const replyToId = messageInput.getAttribute('data-reply-to');
             const repliedTo = messageInput.getAttribute('data-replied-to');
-            let repliedContent = '';
-            let isReplyToStranger = false;
             
-            if (replyToId) {
-                const repliedMessage = document.getElementById(replyToId);
-                if (repliedMessage) {
-                    repliedContent = repliedMessage.querySelector('.message-content p').textContent;
-                    // 確認是回覆自己還是對方
-                    isReplyToStranger = repliedMessage.classList.contains('stranger');
-                }
-            }
+            // 生成唯一ID用於識別訊息
+            const messageId = 'msg-' + Date.now();
+            
+            // 創建訊息資料
+            const messageData = {
+                content: message,
+                replied_to: replyToId || null
+            };
+            
+            // 通過WebSocket發送訊息
+            chatSocket.send(JSON.stringify({
+                action: 'send_message',
+                user_id: userId,
+                message: messageData
+            }));
             
             // 創建新的訊息元素
             const messageEl = document.createElement('div');
             messageEl.classList.add('message', 'self');
-            
-            // 生成唯一ID用於識別訊息
-            const messageId = 'msg-' + Date.now();
             messageEl.id = messageId;
             
-            // 使用React組件格式
-            const MessageHeader = ({ userSettings }) => {
-                return React.createElement(
-                    'div',
-                    { className: 'message-header' },
-                    React.createElement('img', {
-                        src: userSettings.avatar ? `/static/images/avatar${userSettings.avatar}.png` : '/static/images/avatar1.png',
-                        className: 'message-avatar'
-                    }),
-                    React.createElement(
-                        'span',
-                        { className: 'message-nickname' },
-                        userSettings.nickname || '你'
-                    )
-                );
-            };
-
-            // 由於目前環境是純JavaScript，仍需要轉換成HTML字串
             let messageHTML = `
                 <div class="message-header">
                     <img src="${userSettings.avatar ? '/static/images/avatar' + userSettings.avatar + '.png' : '/static/images/avatar1.png'}" class="message-avatar">
@@ -86,8 +263,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="message-content">
             `;
             
-            // 如果是回覆訊息，添加回覆部分，並根據回覆對象添加不同的類別
-            if (replyToId && repliedContent) {
+            // 如果是回覆訊息，添加回覆部分
+            if (replyToId && repliedTo) {
+                const repliedMessageEl = document.getElementById(replyToId);
+                let repliedContent = '';
+                
+                if (repliedMessageEl) {
+                    repliedContent = repliedMessageEl.querySelector('.message-content p').textContent;
+                }
+                
                 messageHTML += `
                     <div class="replied-message" data-original-msg="${replyToId}">
                         <div class="replied-to">回覆給 ${repliedTo}</div>
@@ -149,10 +333,105 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 });
             }
-            
-            // 模擬對方回覆
-            simulateReply();
         }
+    }
+    
+    // 接收訊息
+    function receiveMessage(message) {
+        // 顯示對方正在輸入的指示器
+        messagesContainer.appendChild(typingIndicator);
+        typingIndicator.style.display = 'flex';
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        
+        // 模擬延遲接收
+        setTimeout(() => {
+            // 隱藏打字指示器
+            typingIndicator.style.display = 'none';
+            if (typingIndicator.parentNode) {
+                typingIndicator.parentNode.removeChild(typingIndicator);
+            }
+            
+            // 創建新的訊息元素
+            const messageEl = document.createElement('div');
+            messageEl.classList.add('message', 'stranger');
+            messageEl.id = message.id;
+            
+            let messageHTML = `
+                <div class="message-header">
+                    <img src="/static/images/avatar${chatPartner.avatar || '1'}.png" class="message-avatar">
+                    <span class="message-nickname">${chatPartner.nickname}</span>
+                </div>
+                <div class="message-content">
+            `;
+            
+            // 如果是回覆訊息
+            if (message.replied_to) {
+                messageHTML += `
+                    <div class="replied-message" data-original-msg="${message.replied_to}">
+                        <div class="replied-to">回覆給 ${message.replied_to_sender}</div>
+                        ${message.replied_to_content && message.replied_to_content.length > 50 
+                            ? message.replied_to_content.substring(0, 50) + '...' 
+                            : message.replied_to_content}
+                    </div>
+                `;
+            }
+            
+            messageHTML += `
+                    <p>${message.content}</p>
+                </div>
+                <div class="message-footer">
+                    <span class="message-time">${message.sent_at}</span>
+                    <div class="message-actions">
+                        <button class="action-button reply-button" data-message-id="${message.id}">回覆</button>
+                    </div>
+                </div>
+            `;
+            
+            messageEl.innerHTML = messageHTML;
+            
+            // 添加到訊息容器
+            messagesContainer.appendChild(messageEl);
+            
+            // 綁定回覆訊息點擊事件
+            const repliedMessageEl = messageEl.querySelector('.replied-message');
+            if (repliedMessageEl) {
+                repliedMessageEl.addEventListener('click', function() {
+                    const originalMsgId = this.getAttribute('data-original-msg');
+                    const originalMsg = document.getElementById(originalMsgId);
+                    if (originalMsg) {
+                        originalMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        originalMsg.style.backgroundColor = '#ffffcc';
+                        setTimeout(() => {
+                            originalMsg.style.backgroundColor = '';
+                        }, 2000);
+                    }
+                });
+            }
+            
+            // 綁定新增的回覆按鈕事件
+            const replyButton = messageEl.querySelector('.reply-button');
+            if (replyButton) {
+                replyButton.addEventListener('click', function() {
+                    const targetMessageId = this.getAttribute('data-message-id');
+                    const targetMessageContent = messageEl.querySelector('.message-content p').textContent;
+                    replyToMessage(targetMessageId, targetMessageContent, true);
+                });
+            }
+            
+            // 自動滾動到底部
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }, 1000);
+    }
+    
+    // 添加系統消息
+    function addSystemMessage(text) {
+        const systemMsgEl = document.createElement('div');
+        systemMsgEl.classList.add('system-message');
+        systemMsgEl.innerHTML = `<p>${text}</p>`;
+        messagesContainer.appendChild(systemMsgEl);
+        
+        // 自動滾動到底部
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
     
     // 重設文字區域高度
@@ -163,7 +442,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 綁定訊息操作按鈕事件
     function bindMessageActions(messageElement) {
-        // 回覆按鈕 - 現在可以回覆任何訊息，包括對方的訊息
+        // 回覆按鈕
         const replyButton = messageElement.querySelector('.reply-button');
         if (replyButton) {
             replyButton.addEventListener('click', function() {
@@ -196,10 +475,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 回覆訊息 - 更新參數，添加判斷是否回覆對方的訊息
+    // 回覆訊息
     function replyToMessage(messageId, content, isStrangerMessage = false) {
         // 尋找被回覆訊息的發送者名稱
-        const repliedTo = isStrangerMessage ? '陌生人' : (userSettings.nickname || '你');
+        const repliedTo = isStrangerMessage ? chatPartner.nickname : (userSettings.nickname || '你');
         
         // 創建回覆預覽
         const replyPreview = document.createElement('div');
@@ -246,7 +525,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // 收回訊息
     function recallMessage(messageId) {
         const messageEl = document.getElementById(messageId);
-        if (messageEl) {
+        if (messageEl && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            // 發送收回請求
+            chatSocket.send(JSON.stringify({
+                action: 'recall_message',
+                message_id: messageId,
+                user_id: userId
+            }));
+            
+            // 在UI上顯示收回效果
             const messageContent = messageEl.querySelector('.message-content');
             messageContent.innerHTML = '<p class="recalled-message">此訊息已收回</p>';
             
@@ -261,219 +548,95 @@ document.addEventListener('DOMContentLoaded', function() {
     // 刪除訊息
     function deleteMessage(messageId) {
         const messageEl = document.getElementById(messageId);
-        if (messageEl && confirm('確定要刪除此訊息嗎？')) {
+        if (messageEl && chatSocket && chatSocket.readyState === WebSocket.OPEN && confirm('確定要刪除此訊息嗎？')) {
+            // 發送刪除請求
+            chatSocket.send(JSON.stringify({
+                action: 'delete_message',
+                message_id: messageId,
+                user_id: userId
+            }));
+            
+            // 在UI上刪除訊息
             messageEl.remove();
         }
     }
     
-    // 模擬對方回覆
-    function simulateReply() {
-        // 在最新消息後添加打字指示器
-        messagesContainer.appendChild(typingIndicator);
-        // 顯示打字指示器
-        typingIndicator.style.display = 'flex';
-        
-        // 自動滾動到底部，確保打字指示器可見
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        
-        // 模擬回覆延遲 (1-3秒)
-        const replyDelay = 1000 + Math.random() * 2000;
-        setTimeout(() => {
-            // 隱藏打字指示器並從DOM中暫時移除
-            typingIndicator.style.display = 'none';
-            if (typingIndicator.parentNode) {
-                typingIndicator.parentNode.removeChild(typingIndicator);
-            }
-            
-            // 生成回覆
-            const replies = [
-                "真的嗎？好有趣！",
-                "我也是這麼想的！",
-                "哈哈，你真幽默！",
-                "這讓我想到...",
-                "我之前從沒想過這個觀點。",
-                "不好意思，我可以問你更多關於這個的事情嗎？",
-                "這在你們那裡是常見的嗎？",
-                "我覺得這個想法很棒！",
-                "謝謝分享，我學到了新東西！",
-                "你喜歡什麼類型的音樂/電影？"
-            ];
-            
-            // 隨機決定是否回覆最新訊息
-            const shouldReply = Math.random() > 0.7; // 30% 的機率直接回覆剛剛的訊息
-            
-            // 生成唯一ID用於識別訊息
-            const messageId = 'msg-' + Date.now();
-            
-            // 隨機選擇一個回覆
-            const randomReply = replies[Math.floor(Math.random() * replies.length)];
-            
-            // 獲取當前時間
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const timeString = `${hours}:${minutes}`;
-            
-            // 創建新的訊息元素
-            const messageEl = document.createElement('div');
-            messageEl.classList.add('message', 'stranger');
-            messageEl.id = messageId;
-            
-            let messageHTML = `
-                <div class="message-header">
-                    <img src="/static/images/avatar2.png" class="message-avatar">
-                    <span class="message-nickname">陌生人</span>
-                </div>
-                <div class="message-content">
-            `;
-            
-            // 如果要回覆，找到最新的用戶訊息
-            if (shouldReply) {
-                const userMessages = document.querySelectorAll('.message.self');
-                if (userMessages.length > 0) {
-                    const latestMessage = userMessages[userMessages.length - 1];
-                    const latestMessageId = latestMessage.id;
-                    const latestMessageContent = latestMessage.querySelector('.message-content p').textContent;
-                    const userName = userSettings.nickname || '你';
-                    
-                    messageHTML += `
-                        <div class="replied-message replied-message-self" data-original-msg="${latestMessageId}">
-                            <div class="replied-to">回覆給 ${userName}</div>
-                            ${latestMessageContent.length > 50 ? latestMessageContent.substring(0, 50) + '...' : latestMessageContent}
-                        </div>
-                    `;
-                }
-            }
-            
-            messageHTML += `
-                    <p>${randomReply}</p>
-                </div>
-                <div class="message-footer">
-                    <span class="message-time">${timeString}</span>
-                    <div class="message-actions">
-                        <button class="action-button reply-button" data-message-id="${messageId}">回覆</button>
-                    </div>
-                </div>
-            `;
-            
-            messageEl.innerHTML = messageHTML;
-            
-            // 添加到訊息容器
-            messagesContainer.appendChild(messageEl);
-            
-            // 綁定回覆訊息點擊事件
-            const repliedMessageEl = messageEl.querySelector('.replied-message');
-            if (repliedMessageEl) {
-                repliedMessageEl.addEventListener('click', function() {
-                    const originalMsgId = this.getAttribute('data-original-msg');
-                    const originalMsg = document.getElementById(originalMsgId);
-                    if (originalMsg) {
-                        originalMsg.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        originalMsg.style.backgroundColor = '#ffffcc';
-                        setTimeout(() => {
-                            originalMsg.style.backgroundColor = '';
-                        }, 2000);
-                    }
-                });
-            }
-            
-            // 綁定新增的回覆按鈕事件
-            const replyButton = messageEl.querySelector('.reply-button');
-            if (replyButton) {
-                replyButton.addEventListener('click', function() {
-                    const targetMessageId = this.getAttribute('data-message-id');
-                    const targetMessageContent = messageEl.querySelector('.message-content p').textContent;
-                    replyToMessage(targetMessageId, targetMessageContent, true); // true表示回覆對方的訊息
-                });
-            }
-            
-            // 自動滾動到底部
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }, replyDelay);
-    }
-    
     // 切換到下一個聊天    
     function nextChat() {
-        // 顯示系統訊息        
-        const systemMsgEl = document.createElement('div');        
-        systemMsgEl.classList.add('system-message');
-        systemMsgEl.innerHTML = `<p>正在尋找新對象...</p>`;
-        messagesContainer.appendChild(systemMsgEl);
-        
-        // 模擬搜尋過程 (1-2秒)
-        setTimeout(() => {
-            // 清空聊天記錄，只保留新的系統訊息
+        // 如果已經在聊天中
+        if (chatSocket && isMatched) {
+            if (confirm('確定要尋找新的聊天對象嗎？')) {
+                // 通知服務器用戶想要尋找下一個聊天對象
+                chatSocket.send(JSON.stringify({
+                    action: 'find_next',
+                    user_id: userId
+                }));
+                
+                // 關閉當前聊天連接
+                chatSocket.close();
+                chatSocket = null;
+                
+                // 重置狀態
+                isMatched = false;
+                currentRoomId = null;
+                chatPartner = null;
+                
+                // 清空聊天記錄
+                messagesContainer.innerHTML = '';
+                
+                // 添加系統消息
+                addSystemMessage('正在尋找新的聊天對象...');
+                
+                // 更新狀態顯示
+                statusIndicator.classList.remove('online', 'offline');
+                statusIndicator.classList.add('waiting');
+                chatPartnerLabel.textContent = '等待配對...';
+                matchingTags.textContent = '';
+                
+                // 禁用輸入框和發送按鈕
+                messageInput.disabled = true;
+                sendButton.disabled = true;
+                
+                // 重新初始化匹配WebSocket
+                initMatchingSocket();
+            }
+        } else {
+            // 如果還未開始聊天或尚未匹配成功
+            // 清空聊天記錄
             messagesContainer.innerHTML = '';
             
-            // 添加新的系統訊息
-            const newSystemMsgEl = document.createElement('div');
-            newSystemMsgEl.classList.add('system-message');
-            newSystemMsgEl.innerHTML = `<p>已成功連接！開始新的聊天吧！</p>`;
-            messagesContainer.appendChild(newSystemMsgEl);
+            // 添加系統消息
+            addSystemMessage('正在尋找聊天對象...');
             
-            // 模擬對方發起聊天
-            setTimeout(() => {
-                // 在最新消息後添加打字指示器
-                messagesContainer.appendChild(typingIndicator);
-                // 顯示打字指示器
-                typingIndicator.style.display = 'flex';
-                
-                // 自動滾動到底部，確保打字指示器可見
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                
-                setTimeout(() => {
-                    // 隱藏打字指示器並從DOM中暫時移除
-                    typingIndicator.style.display = 'none';
-                    if (typingIndicator.parentNode) {
-                        typingIndicator.parentNode.removeChild(typingIndicator);
-                    }
-                    
-                    // 對方的第一句話
-                    const firstMessages = [
-                        "嗨，你好！",
-                        "Hi～很高興認識你！",
-                        "哈囉，今天過得如何？",
-                        "嘿！有什麼有趣的事情分享嗎？",
-                        "你好啊，最近有看什麼好看的電影嗎？"
-                    ];
-                    
-                    const randomFirstMsg = firstMessages[Math.floor(Math.random() * firstMessages.length)];
-                    
-                    // 獲取當前時間
-                    const now = new Date();
-                    const hours = String(now.getHours()).padStart(2, '0');
-                    const minutes = String(now.getMinutes()).padStart(2, '0');
-                    const timeString = `${hours}:${minutes}`;
-                    
-                    // 創建新的訊息元素
-                    const messageEl = document.createElement('div');
-                    messageEl.classList.add('message', 'stranger');
-                    messageEl.innerHTML = `
-                        <div class="message-header">
-                            <img src="/static/images/avatar2.png" class="message-avatar">
-                            <span class="message-nickname">陌生人</span>
-                        </div>
-                        <div class="message-content">
-                            <p>${randomFirstMsg}</p>
-                        </div>
-                        <span class="message-time">${timeString}</span>
-                    `;
-                    
-                    // 添加到訊息容器
-                    messagesContainer.appendChild(messageEl);
-                    
-                    // 不再重新添加打字指示器，只在需要時添加
-                    
-                    // 自動滾動到底部
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }, 1500);
-            }, 500);
-        }, 1000 + Math.random() * 1000);
+            // 重新初始化匹配WebSocket
+            if (matchingSocket) {
+                matchingSocket.close();
+            }
+            initMatchingSocket();
+        }
     }
     
     // 結束聊天並返回主頁
     function endChat() {
         if (confirm('確定要結束目前的聊天嗎？')) {
+            // 如果正在聊天中，通知服務器用戶離開
+            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                chatSocket.send(JSON.stringify({
+                    action: 'find_next',
+                    user_id: userId
+                }));
+                chatSocket.close();
+            }
+            
+            // 如果正在匹配中，取消匹配
+            if (matchingSocket && matchingSocket.readyState === WebSocket.OPEN) {
+                matchingSocket.send(JSON.stringify({
+                    action: 'cancel_matching'
+                }));
+                matchingSocket.close();
+            }
+            
+            // 返回主頁
             window.location.href = '/';
         }
     }
@@ -508,19 +671,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // 初始化時重設輸入框高度
     resetTextareaHeight();
     
-    // 初始化時為現有的對方訊息添加回覆事件
-    function initExistingMessages() {
-        // 為對方訊息添加回覆按鈕事件
-        document.querySelectorAll('.message.stranger .reply-button').forEach(button => {
-            button.addEventListener('click', function() {
-                const messageId = this.getAttribute('data-message-id');
-                const targetMessage = document.getElementById(messageId) || this.closest('.message');
-                const messageContent = targetMessage.querySelector('.message-content p').textContent;
-                replyToMessage(targetMessage.id, messageContent, true); // true表示回覆對方的訊息
-            });
-        });
-    }
+    // 頁面離開或刷新時，通知服務器用戶離開
+    window.addEventListener('beforeunload', function() {
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                action: 'find_next',
+                user_id: userId
+            }));
+        }
+        
+        if (matchingSocket && matchingSocket.readyState === WebSocket.OPEN) {
+            matchingSocket.send(JSON.stringify({
+                action: 'cancel_matching'
+            }));
+        }
+    });
     
-    // 初始化時調用
-    initExistingMessages();
+    // 初始化匹配WebSocket連接
+    initMatchingSocket();
 });
