@@ -201,10 +201,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     console.warn('無法找到要標記為收回的訊息:', messageId, clientId);
                 }
             } else if (data.action === 'message_deleted') {
-                // 消息被刪除
                 const messageEl = document.getElementById(data.message_id);
-                if (messageEl) {
-                    messageEl.remove();
+                if (messageEl && messageEl.classList.contains('self')) {
+                    // 隱藏訊息僅對發送者
+                    messageEl.style.display = 'none';
                 }
             } else if (data.action === 'user_left') {
                 // 對方離開聊天

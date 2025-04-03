@@ -551,7 +551,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def message_deleted(self, event):
         """處理訊息刪除事件"""
         logger.debug(f"廣播訊息刪除: {event['message_id']}")
-        await self.send(text_data=json.dumps({
+        await self.send(text_data.json.dumps({
             'action': 'message_deleted',
             'message_id': event['message_id']
         }))
@@ -653,9 +653,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 logger.error(f"用戶 {user_id} 嘗試刪除不屬於自己的訊息 {message_id}")
                 return False
             
-            message.is_deleted = True
+            message.is_deleted_for_sender = True  # 僅對發送者標記為刪除
             message.save()
-            logger.info(f"訊息已標記為刪除: {message_id}")
+            logger.info(f"訊息已標記為對發送者刪除: {message_id}")
             return True
         except Message.DoesNotExist:
             logger.error(f"訊息不存在: {message_id}")
