@@ -44,6 +44,7 @@ class Message(models.Model):
     replied_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
     is_recalled = models.BooleanField(default=False)  # 是否被收回
     is_deleted = models.BooleanField(default=False)  # 是否被刪除
+    client_id = models.CharField(max_length=100, null=True, blank=True)  # 客戶端訊息ID
     sent_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

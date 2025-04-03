@@ -154,22 +154,51 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 收到新消息
                 const message = data.message;
                 
-                // 如果不是自己發送的消息，顯示
-                if (message.sender_id !== userId) {
-                    receiveMessage(message);
-                }
-            } else if (data.action === 'message_recalled') {
-                // 消息被收回
-                const messageEl = document.getElementById(data.message_id);
-                if (messageEl) {
-                    const messageContent = messageEl.querySelector('.message-content');
-                    messageContent.innerHTML = '<p class="recalled-message">此訊息已收回</p>';
-                    
-                    // 移除操作按鈕
-                    const messageActions = messageEl.querySelector('.message-actions');
-                    if (messageActions) {
-                        messageActions.innerHTML = '';
+                // 如果是自己發送的消息，可能需要更新本地消息ID
+                if (message.sender_id === userId) {
+                    // 找到對應的客戶端ID訊息元素
+                    const clientMessageEl = document.getElementById(message.client_id);
+                    if (clientMessageEl) {
+                        // 保存原始客戶端ID到自訂屬性
+                        clientMessageEl.setAttribute('data-client-id', message.client_id);
+                        // 使用資料庫ID替換客戶端ID
+                        clientMessageEl.id = message.id;
+                        
+                        // 更新訊息操作按鈕的data-message-id
+                        const buttons = clientMessageEl.querySelectorAll('[data-message-id]');
+                        buttons.forEach(button => {
+                            button.setAttribute('data-message-id', message.id);
+                        });
                     }
+                    return; // 不要重複顯示自己的消息
+                }
+                
+                // 顯示對方的消息
+                receiveMessage(message);
+            } else if (data.action === 'message_recalled') {
+                // 處理消息被收回的事件
+                const messageId = data.message_id;
+                const clientId = data.client_id;
+                
+                // 首先嘗試使用消息ID查找
+                let messageEl = document.getElementById(messageId);
+                
+                // 如果找不到並且有客戶端ID，嘗試用客戶端ID查找
+                if (!messageEl && clientId) {
+                    messageEl = document.getElementById(clientId);
+                }
+                
+                // 如果仍找不到，嘗試查找標記了對應client_id的元素
+                if (!messageEl && clientId) {
+                    document.querySelectorAll('[data-client-id="' + clientId + '"]').forEach(el => {
+                        messageEl = el;
+                    });
+                }
+                
+                if (messageEl) {
+                    setMessageAsRecalled(messageEl.id);
+                } else {
+                    console.warn('無法找到要標記為收回的訊息:', messageId, clientId);
                 }
             } else if (data.action === 'message_deleted') {
                 // 消息被刪除
@@ -240,7 +269,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // 創建訊息資料
             const messageData = {
                 content: message,
-                replied_to: replyToId || null
+                replied_to: replyToId || null,
+                client_id: messageId  // 添加客戶端ID
             };
             
             // 通過WebSocket發送訊息
@@ -530,10 +560,19 @@ document.addEventListener('DOMContentLoaded', function() {
             chatSocket.send(JSON.stringify({
                 action: 'recall_message',
                 message_id: messageId,
-                user_id: userId
+                user_id: userId,
+                client_id: messageId  // 發送客戶端ID
             }));
             
             // 在UI上顯示收回效果
+            setMessageAsRecalled(messageId);
+        }
+    }
+    
+    // 設定訊息為已收回狀態
+    function setMessageAsRecalled(messageId) {
+        const messageEl = document.getElementById(messageId);
+        if (messageEl) {
             const messageContent = messageEl.querySelector('.message-content');
             messageContent.innerHTML = '<p class="recalled-message">此訊息已收回</p>';
             

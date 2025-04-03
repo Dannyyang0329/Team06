@@ -443,7 +443,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 room_id=self.room_id,
                 user_id=user_id,
                 content=message_data.get('content', ''),
-                replied_to=message_data.get('replied_to')
+                replied_to=message_data.get('replied_to'),
+                client_id=message_data.get('client_id')  # 添加接收客戶端ID
             )
             
             if message:
@@ -461,7 +462,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             'replied_to': str(message.replied_to.id) if message.replied_to else None,
                             'replied_to_content': message.replied_to.content if message.replied_to else None,
                             'replied_to_sender': message.replied_to.sender.nickname if message.replied_to else None,
-                            'sent_at': message.sent_at.strftime('%H:%M')
+                            'sent_at': message.sent_at.strftime('%H:%M'),
+                            'client_id': message_data.get('client_id')  # 返回客戶端ID
                         }
                     }
                 )
@@ -470,8 +472,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # 收回訊息
             message_id = data.get('message_id')
             user_id = data.get('user_id')
+            client_id = data.get('client_id')  # 獲取客戶端ID
             
-            logger.info(f"用戶 {user_id} 收回訊息: {message_id}")
+            logger.info(f"用戶 {user_id} 收回訊息: {message_id}, 客戶端ID: {client_id}")
             
             # 更新訊息狀態
             success = await self.recall_message(message_id, user_id)
@@ -482,7 +485,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     self.room_group_name,
                     {
                         'type': 'message_recalled',
-                        'message_id': message_id
+                        'message_id': message_id,
+                        'client_id': client_id  # 傳遞客戶端ID給所有聊天室成員
                     }
                 )
         
@@ -534,10 +538,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
     
     async def message_recalled(self, event):
         """處理訊息收回事件"""
-        logger.debug(f"廣播訊息收回: {event['message_id']}")
+        logger.debug(f"廣播訊息收回: {event['message_id']}, 客戶端ID: {event.get('client_id', 'N/A')}")
         await self.send(text_data=json.dumps({
             'action': 'message_recalled',
-            'message_id': event['message_id']
+            'message_id': event['message_id'],
+            'client_id': event.get('client_id', '')  # 將客戶端ID添加到廣播消息中
         }))
     
     async def message_deleted(self, event):
@@ -557,7 +562,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
     
     @database_sync_to_async
-    def save_message(self, room_id, user_id, content, replied_to=None):
+    def save_message(self, room_id, user_id, content, replied_to=None, client_id=None):
         """儲存訊息到資料庫"""
         # 延遲匯入模型，確保Django已完全初始化
         from .models import User, ChatRoom, Message
@@ -592,7 +597,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 room=chat_room,
                 sender=user,
                 content=content,
-                replied_to=replied_to_msg
+                replied_to=replied_to_msg,
+                client_id=client_id  # 保存客戶端ID
             )
             
             logger.info(f"保存訊息成功: ID={message.id}, 發送者={user.nickname}, 內容={content[:20]}...")
