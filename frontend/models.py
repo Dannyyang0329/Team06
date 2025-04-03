@@ -3,7 +3,7 @@ import uuid
 
 class User(models.Model):
     """使用者模型"""
-    user_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.CharField(primary_key=True, max_length=50)
     nickname = models.CharField(max_length=50, default="匿名用戶")
     avatar = models.CharField(max_length=50, default="1")  # 頭像編號
     mood = models.CharField(max_length=20, default="neutral")  # 心情
@@ -38,7 +38,6 @@ class ChatRoom(models.Model):
 
 class Message(models.Model):
     """消息模型"""
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     room = models.ForeignKey(ChatRoom, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField()

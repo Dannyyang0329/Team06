@@ -1,10 +1,10 @@
+import uuid
 import json
 import asyncio
 import logging
-from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-import uuid
 from django.db import transaction
+from channels.db import database_sync_to_async
+from channels.generic.websocket import AsyncWebsocketConsumer
 
 # 設置日誌
 logger = logging.getLogger('chat')
@@ -16,22 +16,19 @@ matching_lock = {}
 
 class MatchingConsumer(AsyncWebsocketConsumer):
     """處理使用者配對的WebSocket消費者"""
-    
+
     async def connect(self):
         """處理WebSocket連接"""
         await self.accept()
         logger.info(f"用戶已連接到匹配系統: {self.channel_name}")
-        
         # 將用戶加入匹配組
         await self.channel_layer.group_add("matching_users", self.channel_name)
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
         logger.info(f"用戶斷開連接: {self.channel_name}, code: {close_code}")
-        
         # 從匹配組中移除
         await self.channel_layer.group_discard("matching_users", self.channel_name)
-        
         # 如果用戶在等待匹配，從等待列表中移除
         if hasattr(self, 'user_id'):
             user_id = self.user_id
@@ -265,7 +262,7 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         
         logger.debug(f"尋找匹配: 用戶 {current_user_data['user'].nickname}, 偏好性別 {preferred_gender}")
         logger.debug(f"等待列表中的用戶數: {len(waiting_users)}")
-        logger.debug(f"等待列表中的用戶: {[f'{data['user'].nickname} ({uid})' for uid, data in waiting_users.items()]}")
+        # logger.debug(f"等待列表中的用戶: {[f'{data['user'].nickname} ({uid})' for uid, data in waiting_users.items()]}")
         
         # 鎖定當前用戶，防止被其他進程匹配
         if user_id in matching_lock:
@@ -320,62 +317,27 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         # 延遲匯入模型，確保Django已完全初始化
         from .models import User
         
-        try:
-            # 先檢查是否使用 sessionStorage 生成的新格式ID
-            if isinstance(user_id, str) and user_id.startswith('user-'):
-                # 直接使用這個ID，不需要嘗試轉換
-                pass
-            elif user_id:
-                # 處理前端生成的非標準UUID格式
-                # 使用原始ID而不是生成新的UUID
-                try:
-                    user_uuid = uuid.UUID(str(user_id))
-                    user_id = str(user_uuid)
-                except ValueError:
-                    # 如果不是有效的UUID，直接使用原始ID
-                    # 只記錄警告，但不替換ID
-                    logger.warning(f"用戶ID格式不是標準UUID: {user_id}")
-            
-            if user_id:
-                # 更新既有用戶
-                user, created = User.objects.update_or_create(
-                    user_id=user_id,
-                    defaults={
-                        'nickname': nickname,
-                        'avatar': avatar,
-                        'mood': mood,
-                        'gender': gender,
-                        'channel_name': channel_name
-                    }
-                )
-                if created:
-                    logger.info(f"創建新用戶: {nickname} (ID: {user_id})")
-                else:
-                    logger.info(f"更新既有用戶: {nickname} (ID: {user_id})")
-            else:
-                # 創建新用戶
-                user = User.objects.create(
-                    nickname=nickname,
-                    avatar=avatar,
-                    mood=mood,
-                    gender=gender,
-                    channel_name=channel_name
-                )
-                logger.info(f"創建新用戶(無ID): {nickname} (新ID: {user.user_id})")
-            
-            return user
-        except Exception as e:
-            logger.error(f"保存用戶信息失敗: {str(e)}")
-            # 創建一個新用戶作為備用
-            user = User.objects.create(
-                nickname=nickname,
-                avatar=avatar,
-                mood=mood,
-                gender=gender,
-                channel_name=channel_name
-            )
-            logger.info(f"因錯誤創建備用用戶: {nickname} (新ID: {user.user_id})")
-            return user
+        # 確保user_id不為空，若為空則產生一個格式一致的ID
+        if not user_id:
+            from django.utils.crypto import get_random_string
+            user_id = f"user-{get_random_string(8)}"
+        
+        user, created = User.objects.update_or_create(
+            user_id=user_id,
+            defaults={
+                'nickname': nickname,
+                'avatar': avatar,
+                'mood': mood,
+                'gender': gender,
+                'channel_name': channel_name
+            }
+        )
+        if created:
+            logger.info(f"創建新用戶: {nickname} (ID: {user_id})")
+        else:
+            logger.info(f"更新既有用戶: {nickname} (ID: {user_id})")
+        
+        return user
     
     @database_sync_to_async
     def save_chat_room(self, room_id, user1, user2):
@@ -601,18 +563,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         from .models import User, ChatRoom, Message
         
         try:
-            # 獲取聊天室和用戶
+            # 獲取聊天室
             chat_room = ChatRoom.objects.get(room_id=room_id)
             
-            # 嘗試將user_id轉換為有效的UUID格式
-            try:
-                user_uuid = uuid.UUID(str(user_id))
-                user_id = str(user_uuid)
-            except ValueError:
-                logger.error(f"無效的用戶ID格式: {user_id}")
-                return None
-                
-            # 獲取用戶
+            # 獲取用戶 (直接使用原始user_id，不做轉換)
             try:
                 user = User.objects.get(user_id=user_id)
             except User.DoesNotExist:
@@ -628,13 +582,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             replied_to_msg = None
             if replied_to:
                 try:
-                    # 確保replied_to是有效的UUID格式
-                    replied_uuid = uuid.UUID(str(replied_to))
-                    replied_to = str(replied_uuid)
                     replied_to_msg = Message.objects.get(id=replied_to)
                     logger.info(f"回覆訊息ID: {replied_to}, 內容: {replied_to_msg.content[:20]}...")
-                except ValueError:
-                    logger.error(f"回覆的訊息ID格式無效: {replied_to}")
                 except Message.DoesNotExist:
                     logger.error(f"回覆的訊息不存在: {replied_to}")
             
@@ -663,18 +612,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         from .models import Message
         
         try:
-            # 確保message_id是有效的UUID格式
-            try:
-                msg_uuid = uuid.UUID(str(message_id))
-                message_id = str(msg_uuid)
-            except ValueError:
-                logger.error(f"訊息ID格式無效: {message_id}")
-                return False
-                
             message = Message.objects.get(id=message_id)
             
-            # 檢查是否是訊息發送者
-            if str(message.sender.user_id) != user_id:
+            # 檢查是否是訊息發送者 (直接比較原始ID)
+            if message.sender.user_id != user_id:
                 logger.error(f"用戶 {user_id} 嘗試收回不屬於自己的訊息 {message_id}")
                 return False
             
@@ -696,18 +637,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         from .models import Message
         
         try:
-            # 確保message_id是有效的UUID格式
-            try:
-                msg_uuid = uuid.UUID(str(message_id))
-                message_id = str(msg_uuid)
-            except ValueError:
-                logger.error(f"訊息ID格式無效: {message_id}")
-                return False
-                
             message = Message.objects.get(id=message_id)
             
-            # 檢查是否是訊息發送者
-            if str(message.sender.user_id) != user_id:
+            # 檢查是否是訊息發送者 (直接比較原始ID)
+            if message.sender.user_id != user_id:
                 logger.error(f"用戶 {user_id} 嘗試刪除不屬於自己的訊息 {message_id}")
                 return False
             
