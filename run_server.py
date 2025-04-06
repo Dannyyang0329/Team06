@@ -107,9 +107,9 @@ def main():
         logger.info("Linux/macOS: redis-server")
         logger.info("Windows: 啟動Redis服務或運行redis-server.exe")
         
-        choice = input("是否仍要繼續? [y/N]: ")
-        if choice.lower() != 'y':
-            sys.exit(1)
+        # choice = input("是否仍要繼續? [y/N]: ")
+        # if choice.lower() != 'y':
+        #     sys.exit(1)
     
     # 步驟3: 執行資料庫遷移
     logger.info("\n步驟3: 執行資料庫遷移...")
