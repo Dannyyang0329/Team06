@@ -87,10 +87,10 @@ document.addEventListener('DOMContentLoaded', function() {
             this.classList.add('selected');
             userSettings.avatar = this.getAttribute('data-avatar');
             
-            // 預覽選擇的頭像
+            // 預覽選擇的頭像 - 修正路徑
             const previewAvatar = document.getElementById('preview-avatar');
             if (previewAvatar) {
-                previewAvatar.src = `images/avatar${userSettings.avatar}.png`;
+                previewAvatar.src = `/static/images/avatar${userSettings.avatar}.png`;
             }
         });
     });
@@ -174,12 +174,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // 顯示匹配中界面
         matchingScreen.style.display = 'flex';
         
-        // 模擬匹配過程 (2-5秒)
-        const matchingTime = 2000 + Math.random() * 3000;
-        setTimeout(() => {
-            // 匹配完成後，跳轉到聊天頁面
-            window.location.href = 'chat.html';
-        }, matchingTime);
+        // 直接跳轉到聊天頁面，不需要等待模擬
+        window.location.href = '/chat/';
     });
     
     // 顯示偏好設定模態框
