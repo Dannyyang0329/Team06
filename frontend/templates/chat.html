@@ -1,0 +1,80 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>聊天中</title>
+    <link rel="stylesheet" href="{% static 'css/chat.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="chat-container">
+            <!-- 聊天標頭 -->
+            <div class="chat-header">
+                <div class="chat-info">
+                    <div class="status-indicator waiting" id="status-indicator"></div>
+                    <span class="chat-partner-label" id="chat-partner-label">等待配對...</span>
+                    <span class="matching-tags" id="matching-tags"></span>
+                </div>
+                <div class="chat-actions">
+                    <button id="next-chat" class="btn-next">
+                        <i class="fas fa-forward"></i> 下一位
+                    </button>
+                    <button id="end-chat" class="btn-end">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 用戶資訊 -->
+            <div class="user-info">
+                <span id="user-nickname">你</span>
+                <img id="user-avatar" src="{% static 'images/avatar1.png' %}" alt="Your Avatar">
+            </div>
+
+            <!-- 聊天訊息區 -->
+            <div class="chat-messages" id="chat-messages">
+                <div class="system-message">
+                    <p>歡迎使用秘語聊天室！正在等待其他用戶配對...</p>
+                </div>
+                
+                <div class="typing-indicator">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+
+            <!-- 輸入區 -->
+            <div class="chat-input">
+                <div class="input-container">
+                    <textarea id="message-input" placeholder="輸入訊息..." rows="1" disabled></textarea>
+                    <button id="send-message" class="btn-send" disabled>
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <button id="load-messages">Load Messages</button>
+<div id="messages-container"></div>
+<script>
+    document.getElementById('load-messages').addEventListener('click', () => {
+        fetch('/get_messages/')
+            .then(response => response.json())
+            .then(data => {
+                const container = document.getElementById('messages-container');
+                container.innerHTML = '';
+                data.messages.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.textContent = `${msg.sender}: ${msg.message}`;
+                    container.appendChild(messageDiv);
+                });
+            });
+    });
+</script>
+    <script src="{% static 'js/chat.js' %}"></script>
+</body>
+</html>
