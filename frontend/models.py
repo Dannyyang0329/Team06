@@ -53,3 +53,11 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['sent_at']
+
+class Preference(models.Model):
+    user_id = models.CharField(max_length=50, unique=True)
+    preferred_gender = models.CharField(max_length=10, default="all")  # 偏好性別
+    tags = models.JSONField(default=list)  # 興趣標籤
+
+    def __str__(self):
+        return f"Preference of User {self.user_id}"
