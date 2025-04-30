@@ -1,6 +1,6 @@
 # Week11 Homework
 
-## 0. Docker Image 實作
+## Docker Image 實作
 
 Docker Hub 連結：
 
