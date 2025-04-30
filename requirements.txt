@@ -4,4 +4,8 @@ daphne>=4.0.0
 channels-redis>=4.0.0
 asgiref>=3.7.0
 redis>=4.0.0
-whitenoise>=5.0.0  # 新增此行
+whitenoise>=5.0.0
+
+python-socketio
+uvicorn
+python-engineio==4.9.0
