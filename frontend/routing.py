@@ -1,17 +1,10 @@
 from django.urls import re_path
+from . import consumers
 
-# 延遲匯入消費者以避免循環匯入問題
-def get_chat_consumer():
-    from .consumers import ChatConsumer
-    return ChatConsumer.as_asgi()
-
-def get_matching_consumer():
-    from .consumers import MatchingConsumer
-    return MatchingConsumer.as_asgi()
-
-# 定義WebSocket路由模式
+# WebSocket URL路由配置
 websocket_urlpatterns = [
-    re_path(r'ws/chat/$', get_chat_consumer()),
-    re_path(r'ws/chat/(?P<room>[^/]+)/$', get_chat_consumer()),
-    re_path(r'ws/matching/$', get_matching_consumer()),
+    re_path(r'ws/chat/$', consumers.ChatConsumer.as_asgi()),
+    re_path(r'ws/matching/$', consumers.MatchingConsumer.as_asgi()),
 ]
+
+# Socket.IO路由由asgi.py中的socketio.ASGIApp處理
