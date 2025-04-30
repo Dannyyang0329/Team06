@@ -188,26 +188,42 @@ document.addEventListener('DOMContentLoaded', function() {
         preferencesModal.style.display = 'none';
     });
     
-    // 保存偏好設定
+    // Use jQuery AJAX to save preferences
     savePreferencesBtn.addEventListener('click', function() {
-        // 獲取選擇的性別偏好
         const genderRadio = document.querySelector('input[name="gender"]:checked');
         if (genderRadio) {
             userSettings.preferredGender = genderRadio.value;
         }
-        
-        // 獲取選擇的標籤
+
         userSettings.tags = [];
         document.querySelectorAll('.tag.selected').forEach(tag => {
             userSettings.tags.push(tag.textContent);
         });
-        
-        // 保存設置
-        saveUserSettings();
-        
-        // 關閉模態框
-        preferencesModal.style.display = 'none';
+
+        // Use jQuery AJAX to send data to the server
+        $.ajax({
+            url: '/save-preferences/',
+            type: 'POST',
+            contentType: 'application/json',
+            headers: {
+                'X-CSRFToken': getCSRFToken() // Set CSRF token
+            },
+            data: JSON.stringify(userSettings),
+            success: function(response) {
+                alert('偏好設定已儲存！');
+                preferencesModal.style.display = 'none';
+            },
+            error: function(xhr, status, error) {
+                alert('儲存偏好設定時發生錯誤，請稍後再試。');
+            }
+        });
     });
+
+    // 獲取 CSRF Token 的輔助函數
+    function getCSRFToken() {
+        const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        return csrfToken ? csrfToken.value : '';
+    }
     
     // 取消匹配
     cancelMatchingBtn.addEventListener('click', function() {

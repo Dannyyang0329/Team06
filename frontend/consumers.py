@@ -551,7 +551,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def message_deleted(self, event):
         """處理訊息刪除事件"""
         logger.debug(f"廣播訊息刪除: {event['message_id']}")
-        await self.send(text_data.json.dumps({
+        await self.send(text_data=json.dumps({
             'action': 'message_deleted',
             'message_id': event['message_id']
         }))

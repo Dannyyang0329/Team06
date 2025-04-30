@@ -16,8 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+import webhw.views as views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("frontend.urls")),  # Include the URLs from the frontend app
+    path('save-preferences/', views.save_preferences, name='save_preferences'),
 ]

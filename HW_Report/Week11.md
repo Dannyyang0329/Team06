@@ -58,6 +58,65 @@ Channels doesn't support socket.io - it's a different protocol that isn't websoc
 
 以上功能也可以使用 ```socketio``` 實作完成，未來若有需要可重新實作。
 
+### Ajax
+我們嘗試將先前只儲存在使用者 browswer 端的 local storage 的個人偏好選擇（偏好配對性別、1~3項可選擇興趣）使用 ajax 儲存到 server。
+
+#### Frontend
+前端使用 ajax 發送 POST request，並檢查 CSRF token 避免被阻擋。
+
+```js/main.js```
+```javascript
+   // Use jQuery AJAX to save preferences
+   savePreferencesBtn.addEventListener('click', function() {
+      const genderRadio = document.querySelector(...);
+      // ...
+
+      // Use jQuery AJAX to send data to the server
+      $.ajax({
+         url: '/save-preferences/',
+         type: 'POST',
+         contentType: 'application/json',
+         headers: {
+               'X-CSRFToken': getCSRFToken() // Set CSRF token
+         },
+         data: JSON.stringify(userSettings),
+         success: function(response) {
+               alert('偏好設定已儲存！');
+               preferencesModal.style.display = 'none';
+         },
+         error: function(xhr, status, error) {
+               alert('儲存偏好設定時發生錯誤，請稍後再試。');
+         }
+      });
+   });
+
+   function getCSRFToken() {
+      const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]');
+      return csrfToken ? csrfToken.value : '';
+   }
+```
+
+#### Backend
+後端 Django 部分，於 ```webhw/view.py``` 中新增相關函式，並新增相關的 url：
+```javascript
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+@csrf_exempt
+def save_preferences(request):
+   if request.method == 'POST':
+      try:
+            data = json.loads(request.body)
+            //...
+            print("Received preferences:", data)
+            return JsonResponse({'message': 'Preferences saved successfully!'}, status=200)
+      except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+   return JsonResponse({'error': 'Invalid request method'}, status=405)
+```
+由於此處為 ajax 練習，且我們討論後匿名聊天沒有一定需要將偏好對應 ```user_id```，因此後續決定暫時不儲存，保留未來實作空間。
+
 ## 2. 額外找了與當週上課的主題相關的程式技術
 
 ### Django Channels
@@ -68,7 +127,7 @@ Channels doesn't support socket.io - it's a different protocol that isn't websoc
 ## 3. 組員分工情況
 
 第6組：
-* 賴佑寧 (25%): Django Models, Socket.IO 客戶端
-* 鄭宇彤 (25%): Django Views, Socket.IO 伺服器端
-* 楊育勝 (25%): Django Templates, 前端優化
-* 黃唯秩 (25%): 測試與整合
+* 賴佑寧 (25%): Django MVT architecture, WebSocket, Ajax
+* 鄭宇彤 (25%): Django MVT architecture, WebSocket, Ajax
+* 楊育勝 (25%): Django MVT architecture, WebSocket, Ajax
+* 黃唯秩 (25%): Django MVT architecture, WebSocket, Ajax
