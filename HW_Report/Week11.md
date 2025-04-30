@@ -1,5 +1,30 @@
 # Week11 Homework
 
+## 0. Docker Image 實作
+
+Docker Hub 連結：
+
+https://hub.docker.com/r/yuunnn/team06-web
+
+
+Pull 指令：
+
+```bash
+docker pull yuunnn/team06-web:week07
+```
+
+Docker 啟動方式說明：
+```bash
+git clone https://github.com/Dannyyang0329/Team06.git
+cd Team06
+
+docker-compose up
+```
+
+預設網站：
+
+http://localhost:8000
+
 ## 1. 練習了哪些當週上課的主題
 
 ### Django MTV 架構
