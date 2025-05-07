@@ -28,11 +28,9 @@ header {
     justify-content: space-between;
     align-items: center;
     padding: 1rem 2rem;
-    background: rgba(33, 33, 33, 0.95);
+    background: #3498db;
     backdrop-filter: blur(10px);
-    max-width: 1200px;
-    margin: 0 auto;
-    border-radius: 0 0 12px 12px;
+    width: 100%;
 }
 
 .logo {
@@ -53,13 +51,8 @@ header {
 }
 
 #auth-message {
-    color: #ff9800;
+    color: #fff;
     margin-right: 1rem;
-    font-weight: 500;
-    padding: 0.5rem 1rem;
-    border: 1px solid rgba(255, 152, 0, 0.3);
-    border-radius: 20px;
-    background: rgba(255, 152, 0, 0.1);
 }
 
 .btn-secondary {
@@ -765,4 +758,15 @@ header {
         width: 95%;
         padding: 15px;
     }
+}
+
+#logout-btn {
+    color: #fff !important;
+    border: 2px solid #fff !important;
+    background: transparent !important;
+}
+#logout-btn:hover {
+    background: #fff !important;
+    color: #3498db !important;
+    border: 2px solid #3498db !important;
 }

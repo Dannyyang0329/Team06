@@ -341,6 +341,8 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (authLogin) authLogin.style.display = 'none';
                         if (authRegister) authRegister.style.display = 'none';
                     }
+                    const orText = document.getElementById('or-text');
+                    if (orText) orText.style.display = 'none';
                 } else {
                     clearAuthData();
                 }
@@ -363,6 +365,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (authLogin) authLogin.style.display = 'inline-block';
             if (authRegister) authRegister.style.display = 'inline-block';
         }
+        const orText = document.getElementById('or-text');
+        if (orText) orText.style.display = '';
     }
 
     // 初始檢查登入狀態

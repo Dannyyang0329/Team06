@@ -318,8 +318,28 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         # 延遲匯入模型，確保Django已完全初始化
         from .models import User
         from .serializers import UserSerializer
+        from django.utils.crypto import get_random_string
 
-        serializer = UserSerializer(data=user_data)            
+        # 依照唯一鍵 (這裡假設 user_id 唯一) 先嘗試抓舊資料
+        user_id = user_data.get("user_id")
+        user_instance = None
+        if user_id:
+            try:
+                user_instance = User.objects.get(user_id=user_id)
+            except User.DoesNotExist:
+                user_instance = None
+
+        # 若沒有 user_id 或查無此人，幫他配一個新的
+        if not user_id:
+            user_data["user_id"] = f"user-{get_random_string(8)}"
+
+        # 建立 serializer：有 instance 就會走 update，沒有就走 create
+        serializer = UserSerializer(
+            instance=user_instance,
+            data=user_data,
+            partial=True  # 允許只傳部分欄位更新
+        )
+            
         if serializer.is_valid():
             user_data = serializer.validated_data
             # 確保user_id不為空，若為空則產生一個格式一致的ID

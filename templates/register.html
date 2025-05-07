@@ -1,0 +1,213 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-TW" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>註冊 - 秘語</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            overflow-y: auto;
+        }
+        .app-container {
+            min-height:100vh;
+        }
+        .scroll-area{
+            max-height:calc(100vh - 150px); /* leave room for logo/footer */
+            overflow-y:auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="welcome-screen">
+            <div class="logo">
+                <h1>秘語</h1>
+                <p>創建您的帳號</p>
+            </div>
+            <div class="auth-form">
+                <form id="register-form">
+                    <div class="form-group">
+                        <label for="user_id">
+                            <i class="fas fa-id-card"></i>
+                            帳號
+                        </label>
+                        <input type="text" id="user_id" name="user_id" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="nickname">
+                            <i class="fas fa-user"></i>
+                            暱稱
+                        </label>
+                        <input type="text" id="nickname" name="nickname" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="gender">性別</label>
+                        <select id="gender" name="gender" required>
+                            <option value="">請選擇性別</option>
+                            <option value="male">男生</option>
+                            <option value="female">女生</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>心情</label>
+                        <div class="mood-options">
+                            <div class="mood-option" data-mood="happy">
+                                <i class="fas fa-smile"></i>
+                                <span>開心</span>
+                            </div>
+                            <div class="mood-option" data-mood="neutral">
+                                <i class="fas fa-meh"></i>
+                                <span>普通</span>
+                            </div>
+                            <div class="mood-option" data-mood="sad">
+                                <i class="fas fa-frown"></i>
+                                <span>難過</span>
+                            </div>
+                        </div>
+                        <input type="hidden" id="mood" name="mood" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>頭像</label>
+                        <div class="avatar-options">
+                            <div class="avatar-option selected" data-avatar="1">
+                                <img src="{% static 'images/avatar1.png' %}" alt="Avatar 1">
+                            </div>
+                            <div class="avatar-option" data-avatar="2">
+                                <img src="{% static 'images/avatar2.png' %}" alt="Avatar 2">
+                            </div>
+                            <div class="avatar-option" data-avatar="3">
+                                <img src="{% static 'images/avatar3.png' %}" alt="Avatar 3">
+                            </div>
+                            <div class="avatar-option" data-avatar="4">
+                                <img src="{% static 'images/avatar4.png' %}" alt="Avatar 4">
+                            </div>
+                        </div>
+                        <input type="hidden" id="avatar" name="avatar" value="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">
+                            <i class="fas fa-lock"></i>
+                            密碼
+                        </label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password2">
+                            <i class="fas fa-lock"></i>
+                            確認密碼
+                        </label>
+                        <input type="password" id="password2" name="password2" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary">註冊</button>
+                </form>
+
+                <div id="register-message" class="auth-message"></div>
+
+                <div class="auth-links">
+                    <p>已經有帳號？ <a href="/login/">立即登入</a></p>
+                    <p>- 或是 -</p>
+                    <a href="/" class="btn-secondary">返回首頁</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 處理心情選擇
+        document.querySelectorAll('.mood-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.mood-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                document.getElementById('mood').value = this.dataset.mood;
+            });
+        });
+
+        // 處理頭像選擇
+        document.querySelectorAll('.avatar-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
+                this.classList.add('selected');
+                document.getElementById('avatar').value = this.dataset.avatar;
+            });
+        });
+
+        // 表單提交
+        document.getElementById('register-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const messageDiv = document.getElementById('register-message');
+            
+            // 驗證表單
+            const mood = document.getElementById('mood').value;
+            if (!mood) {
+                messageDiv.textContent = '請選擇心情';
+                messageDiv.className = 'auth-message error';
+                return;
+            }
+
+            const password = document.getElementById('password').value;
+            const password2 = document.getElementById('password2').value;
+            if (password !== password2) {
+                messageDiv.textContent = '兩次密碼輸入不相同';
+                messageDiv.className = 'auth-message error';
+                return;
+            }
+
+            // 準備表單數據
+            const formData = {
+                user_id: document.getElementById('user_id').value,
+                nickname: document.getElementById('nickname').value,
+                password: password,
+                password2: password2,
+                gender: document.getElementById('gender').value,
+                mood: mood,
+                avatar: document.getElementById('avatar').value
+            };
+
+            try {
+                const response = await fetch('/api/auth/register/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = '註冊成功！';
+                    messageDiv.className = 'auth-message success';
+                    const redirectDiv = document.createElement('div');
+                    redirectDiv.innerHTML = `
+                        <p>3秒後自動跳轉到首頁</p>
+                        <button onclick="window.location.href='/'" class="btn-primary" style="margin-top: 10px;">立即返回首頁</button>
+                    `;
+                    messageDiv.appendChild(redirectDiv);
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    messageDiv.textContent = '註冊失敗: ' + (data.detail || Object.values(data)[0]);
+                    messageDiv.className = 'auth-message error';
+                }
+            } catch (error) {
+                console.error('註冊錯誤:', error);
+                messageDiv.textContent = '註冊時發生錯誤，請稍後再試';
+                messageDiv.className = 'auth-message error';
+            }
+        });
+    </script>
+</body>
+</html>

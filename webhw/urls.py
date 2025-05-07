@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/auth/register/', AuthViewSet.as_view({'post': 'register'}), name='register'),
     path('api/auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('api/auth/user/', AuthViewSet.as_view({'get': 'user_info'}), name='user_info'),
+    path('api/auth/login/', AuthViewSet.as_view({'post': 'login'}), name='auth_login'),
     path('login/', AuthViewSet.as_view({'get': 'login_page'}), name='login'),
     path('register/', AuthViewSet.as_view({'get': 'register_page'}), name='register'),
     path('', index_view, name='index'),

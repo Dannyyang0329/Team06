@@ -33,6 +33,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 class AuthViewSet(viewsets.ViewSet):
+    permission_classes = [AllowAny]
+
     @action(detail=False, methods=['get'])
     def login_page(self, request):
         return render(request, 'login.html')
@@ -58,11 +60,38 @@ class AuthViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def user_info(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({
+                "message": "未登入",
+                "is_authenticated": False
+            }, status=200)
         return Response({
             "message": "您已通過認證",
-            "user_id": request.user.user_id,
-            "nickname": request.user.nickname
+            "user_id": user.user_id,
+            "nickname": user.nickname,
+            "is_authenticated": True
         })
+
+    @action(detail=False, methods=['post'])
+    def login(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from django.contrib.auth import authenticate
+        user_id = request.data.get('user_id')
+        password = request.data.get('password')
+        user = authenticate(request, user_id=user_id, password=password)
+        if user is not None:
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'token': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                },
+                'user_id': user.user_id,
+                'nickname': user.nickname
+            })
+        else:
+            return Response({'detail': '帳號或密碼錯誤'}, status=401)
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
