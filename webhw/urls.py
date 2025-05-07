@@ -17,9 +17,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 import webhw.views as views
+from rest_framework.routers import DefaultRouter
+from frontend.viewsets import UserViewSet, ChatRoomViewSet, MessageViewSet, PreferenceViewSet
+
+router = DefaultRouter()
+router.register(r'users', UserViewSet)
+router.register(r'chatrooms', ChatRoomViewSet)
+router.register(r'messages', MessageViewSet)
+router.register(r'preferences', PreferenceViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("", include("frontend.urls")),  # Include the URLs from the frontend app
     path('save-preferences/', views.save_preferences, name='save_preferences'),
 ]
+
+urlpatterns += router.urls
