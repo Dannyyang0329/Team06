@@ -9,6 +9,12 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <div class="user-status">
+        <span id="username-display"></span>
+        <button id="logout-btn" style="display: none;" onclick="logout()">Logout</button>
+        <button id="login-btn" style="display: none;" onclick="window.location.href='/login/'">Login</button>
+    </div>
+
     <div class="app-container">
         <div class="chat-container">
             <!-- 聊天標頭 -->
@@ -59,5 +65,68 @@
         </div>
     </div>
     <script src="{% static 'js/chat.js' %}"></script>
+    <script>
+        // 檢查登入狀態
+        function checkLoginStatus() {
+            const token = localStorage.getItem('access_token');
+            const username = localStorage.getItem('username');
+            const usernameDisplay = document.getElementById('username-display');
+            const logoutBtn = document.getElementById('logout-btn');
+            const loginBtn = document.getElementById('login-btn');
+
+            if (token && username) {
+                usernameDisplay.textContent = `Logged in as: ${username}`;
+                logoutBtn.style.display = 'inline-block';
+                loginBtn.style.display = 'none';
+            } else {
+                usernameDisplay.textContent = 'Anonymous User';
+                logoutBtn.style.display = 'none';
+                loginBtn.style.display = 'inline-block';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            localStorage.removeItem('username');
+            window.location.href = '/login/';
+        }
+
+        // 在頁面加載時檢查登入狀態
+        checkLoginStatus();
+
+        // Websocket 連接相關代碼
+        const chatSocket = new WebSocket(
+            'ws://'
+            + window.location.host
+            + '/ws/chat/'
+        );
+
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const username = localStorage.getItem('username') || 'Anonymous';
+            
+            // ...existing websocket code...
+        };
+
+        document.querySelector('#chat-message-input').focus();
+        document.querySelector('#chat-message-input').onkeyup = function(e) {
+            if (e.key === 'Enter') {
+                document.querySelector('#chat-message-submit').click();
+            }
+        };
+
+        document.querySelector('#chat-message-submit').onclick = function(e) {
+            const messageInputDom = document.querySelector('#chat-message-input');
+            const message = messageInputDom.value;
+            const username = localStorage.getItem('username') || 'Anonymous';
+            
+            chatSocket.send(JSON.stringify({
+                'message': message,
+                'username': username
+            }));
+            messageInputDom.value = '';
+        };
+    </script>
 </body>
 </html>

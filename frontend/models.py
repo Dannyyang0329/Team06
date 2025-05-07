@@ -1,16 +1,38 @@
 from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 import uuid
 
-class User(models.Model):
+class UserManager(BaseUserManager):
+    def create_user(self, user_id, password=None, **extra_fields):
+        if not user_id:
+            raise ValueError('使用者帳號為必填')
+        user = self.model(user_id=user_id, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, user_id, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        return self.create_user(user_id, password, **extra_fields)
+
+class User(AbstractBaseUser, PermissionsMixin):
     """使用者模型"""
-    user_id = models.CharField(primary_key=True, max_length=50)
+    user_id = models.CharField(primary_key=True, max_length=50, unique=True)
     nickname = models.CharField(max_length=50, default="匿名用戶")
-    avatar = models.CharField(max_length=50, default="1")  # 頭像編號
-    mood = models.CharField(max_length=20, default="neutral")  # 心情
-    gender = models.CharField(max_length=10, default="other")  # 性別
-    channel_name = models.CharField(max_length=100, null=True, blank=True)  # WebSocket通道名稱
+    avatar = models.CharField(max_length=50, default="1")
+    mood = models.CharField(max_length=20, default="neutral")
+    gender = models.CharField(max_length=10, default="other")
+    channel_name = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     last_active = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+
+    objects = UserManager()
+
+    USERNAME_FIELD = 'user_id'
+    REQUIRED_FIELDS = ['nickname']
 
     def __str__(self):
         return f"{self.nickname} ({self.user_id})"
@@ -28,6 +50,7 @@ class WaitingUser(models.Model):
 class ChatRoom(models.Model):
     """聊天室模型"""
     room_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # room_id = models.CharField(primary_key=True, default="", editable=False)
     user1 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_room_user1')
     user2 = models.ForeignKey(User, on_delete=models.CASCADE, related_name='chat_room_user2')
     active = models.BooleanField(default=True)  # 是否活躍
