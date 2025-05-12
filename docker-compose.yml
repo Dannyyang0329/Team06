@@ -1,7 +1,8 @@
 services:
 
   web:
-    build: .
+    # build: .
+    image: ytcytc/team06-web:latest
     command: python run_server.py
     ports:
       - "8000:8000"

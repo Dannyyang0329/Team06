@@ -514,6 +514,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.is_bot_room = False
         except Exception as e:
             logger.error(f"[connect] 查詢聊天室bot user失敗: {e}")
+        self.chat_history = []  # 初始化聊天歷史
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
@@ -659,15 +660,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
             api_key=api_key,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
         )
+
+        # 將聊天歷史加入到 messages 中
+        messages = self.chat_history + [
+            {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
+            {"role": "user", "content": user_message}
+        ]
+
         try:
             response = await sync_to_async(client.chat.completions.create)(
                 model="gemini-2.0-flash",
-                messages=[
-                    {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
-                    {"role": "user", "content": user_message}
-                ]
+                messages=messages
             )
-            return response.choices[0].message.content
+            bot_reply = response.choices[0].message.content
+
+            # 將用戶訊息和機器人回覆加入聊天歷史
+            self.chat_history.append({"role": "user", "content": user_message})
+            self.chat_history.append({"role": "assistant", "content": bot_reply})
+
+            return bot_reply
         except Exception as e:
             return f"[AI服務異常] {e}"
 
