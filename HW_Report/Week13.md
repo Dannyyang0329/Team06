@@ -10,7 +10,7 @@ https://hub.docker.com/r/yuunnn/team06-web
 Pull 指令：
 
 ```bash
-docker pull yuunnn/team06-web:week07
+docker pull ytcytc/team06-web:latest
 ```
 
 Docker 啟動方式說明：
@@ -66,65 +66,207 @@ else:
 還可以順便檢查欄位。
 
 ### JSON Web Token
-我們使用 JWT 技術創建註冊、登入、登出功能：
-1. 註冊功能：
-    - 使用者透過前端表單提交註冊資訊（如帳號、密碼等）。
-    - 後端接收請求後，使用 Django Rest Framework 的 `UserSerializer` 驗證資料。
-    - 驗證成功後，創建新使用者並回傳成功訊息。
+我們在專案中使用了 JSON Web Token (JWT) 來實現用戶的身份驗證，以下是相關說明：
 
-2. 登入功能：
-    - 使用者提交帳號與密碼至後端。
-    - 後端驗證帳號與密碼是否正確，若正確則生成 JWT Token。
-    - Token 生成使用 `rest_framework_simplejwt` 套件，範例如下：
-      ```python
-      
-      from rest_framework_simplejwt.tokens import RefreshToken
+1. **功能介紹**
+   - JWT 是一種輕量級的身份驗證機制，通過加密的 Token 傳遞用戶身份資訊，避免每次請求都查詢資料庫。
 
-      def get_tokens_for_user(user):
-            refresh = RefreshToken.for_user(user)
-            return {
-                 'refresh': str(refresh),
-                 'access': str(refresh.access_token),
-            }
-      ```
-    - 回傳 Token 至前端，前端將 Token 儲存於 Local Storage 或 Cookie 中。
+2. **安裝方式**
+   - 在 `requirements.txt` 中加入：
+     ```
+     djangorestframework-simplejwt
+     ```
 
-3. 登出功能：
-    - 使用者登出時，前端刪除儲存的 Token。
-    - 後端可選擇將 Token 加入黑名單（需啟用 `Blacklist` 功能），範例如下：
-      ```python
-      from rest_framework_simplejwt.tokens import RefreshToken
+3. **設定方式**
+   - 在 `settings.py` 中加入：
+     ```python
+     REST_FRAMEWORK = {
+         'DEFAULT_AUTHENTICATION_CLASSES': (
+             'rest_framework_simplejwt.authentication.JWTAuthentication',
+         ),
+     }
+     ```
+   - 配置 JWT 的有效期等參數：
+    ```python
+    from datetime import timedelta
+     
+    SIMPLE_JWT = {
+        'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),  # Increased for testing
+        'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+        'ROTATE_REFRESH_TOKENS': True,
+        'BLACKLIST_AFTER_ROTATION': True,
+        'ALGORITHM': 'HS256',
+        'SIGNING_KEY': SECRET_KEY,
+        'AUTH_HEADER_TYPES': ('Bearer',),
+        'USER_ID_FIELD': 'user_id',  # Use user_id instead of id
+        'USER_ID_CLAIM': 'user_id',  # Use user_id in the JWT claims
+    }
+    ```
 
-      def blacklist_token(refresh_token):
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-      ```
+4. **自訂 JWT 序列化器**
+   - 我們自訂了 `CustomTokenObtainPairSerializer`，讓 Token 中包含用戶的 `user_id` 和 `nickname`：
+     ```python
+     class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+         username_field = 'user_id'
 
-4. Token 驗證：
-    - 每次前端發送 API 請求時，將 `Authorization` 標頭設為 `Bearer [access_token]`。
-    - 後端使用 `JWTAuthentication` 驗證 Token 的有效性，若無效則回傳 401 Unauthorized。
+         def validate(self, attrs):
+             credentials = {
+                 'user_id': attrs.get('user_id'),
+                 'password': attrs.get('password')
+             }
 
-5. Token 更新：
-    - 當 Access Token 過期時，前端可使用 Refresh Token 請求新的 Access Token。
-    - 範例如下：
-      ```python
-      POST /api/token/refresh/
-      {
-            "refresh": "your_refresh_token"
-      }
-      ```
-    - 後端回傳新的 Access Token，前端更新儲存的 Token。
+             user = authenticate(**credentials)
+             if user:
+                 data = super().validate(attrs)
+                 data['user_id'] = user.user_id
+                 data['nickname'] = user.nickname
+                 return data
+             else:
+                 raise serializers.ValidationError('無法使用提供的認證資訊登入')
+     ```
 
-此流程確保了使用者的身份驗證安全性，同時提供了良好的使用體驗。
+5. **登入與登出功能**
+   - **登入**：用戶提供 `user_id` 和 `password`，後端驗證成功後返回 JWT：
+     ```python
+     class CustomTokenObtainPairView(TokenObtainPairView):
+         serializer_class = CustomTokenObtainPairSerializer
+     ```
+     - 返回的 Token 範例：
+       ```json
+       {
+           "access": "...",
+           "refresh": "...",
+           "user_id": "user123",
+           "nickname": "John Doe"
+       }
+       ```
+   - **登出**：用戶提供 "refresh" Token，後端將其加入黑名單：
+     ```python
+     class LogoutView(APIView):
+         permission_classes = [IsAuthenticated]
+
+         def post(self, request):
+             try:
+                 refresh_token = request.data.get("refresh")
+                 if not refresh_token:
+                     return Response({"error": "Refresh token is required"}, status=400)
+
+                 token = RefreshToken(refresh_token)
+                 token.blacklist()
+
+                 return Response({
+                     "success": True,
+                     "message": "您已成功登出",
+                     "status": "Token has been blacklisted"
+                 })
+             except Exception as e:
+                 return Response({
+                     "success": False,
+                     "error": str(e),
+                     "message": "登出時發生錯誤"
+                 }, status=400)
+     ```
+
+6. **使用方式**
+   - 用戶登入後，後端會生成一個 JWT，返回給前端：
+     ```json
+     {
+         "access": "...",
+         "refresh": "...",
+         "user_id": "user123",
+         "nickname": "John Doe"
+     }
+     ```
+   - 前端在後續請求中，將 `access` Token 放入 HTTP Header：
+     ```
+     Authorization: Bearer <access_token>
+     ```
+
+7. **優點**
+   - 無狀態：不需要在伺服器端保存用戶會話。
+   - 高效：Token 自帶用戶資訊，減少資料庫查詢。
+   - 安全性：通過黑名單機制，實現 Token 的即時失效。
+
+8. 實作上遇到的困難
+由於 Django 本身也有一個 `User` model，而且是 JWT 預設使用的 model，因此需要在 webhw/settings.py 中改變預設的 model：
+    ```python
+    # 指定使用自定義的 User model
+    AUTH_USER_MODEL = 'frontend.User'
+    ```
 
 ### API 串接: Gemini
+
+我們在專案中使用 Google Gemini API 作為 AI 聊天機器人的核心，以下是實作與串接的詳細說明：
+
+1. **環境變數設定**
+   - 在專案根目錄新增 `.env` 檔案，並填入以下內容：
+     ```
+     GEMINI_API_KEY=你的Google Gemini API金鑰
+     ```
+   - 確保專案已安裝 `python-dotenv` 套件，Django 啟動時會自動載入 `.env` 檔案中的環境變數。
+
+2. **Gemini API 使用方式**
+   - 我們使用 `openai` 套件來與 Google Gemini API 進行互動。
+   - 在 `consumers.py` 中實作了 `get_gemini_response` 方法，該方法會根據用戶的訊息呼叫 Gemini API 並回傳 AI 的回覆。
+
+3. **程式碼範例**
+   以下是 `get_gemini_response` 方法的實作：
+   ```python
+   async def get_gemini_response(self, user_message):
+       from openai import OpenAI
+       import os
+
+       api_key = os.environ.get('GEMINI_API_KEY')
+       client = OpenAI(
+           api_key=api_key,
+           base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+       )
+       try:
+           response = await sync_to_async(client.chat.completions.create)(
+               model="gemini-2.0-flash",
+               messages=[
+                   {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
+                   {"role": "user", "content": user_message}
+               ]
+           )
+           return response.choices[0].message.content
+       except Exception as e:
+           return f"[AI服務異常] {e}"
+    ```
+
 
 ## 2. 額外找了與當週上課的主題相關的程式技術
 
 ### python-dotenv
-為了使執行此份repo的使用者能輸入自己的 google gemini api key，我們在目錄底下新增 `.env` 檔案，供使用者貼上 key。
+為了讓專案更方便管理環境變數，我們使用了 `python-dotenv` 套件，以下是相關說明：
 
-當啟動 django backend 時，透過 `python-dotenv` 這個套件能
+1. **功能介紹**
+   - `python-dotenv` 允許我們將敏感資訊（如 API 金鑰、資料庫密碼）存放在 `.env` 檔案中，並在程式啟動時自動載入這些變數到環境變數中。
+
+2. **安裝方式**
+   - 在 `requirements.txt` 中加入：
+     ```
+     python-dotenv
+     ```
+
+3. **使用方式**
+   - 在專案根目錄新增 `.env` 檔案，範例如下：
+     ```
+     GEMINI_API_KEY=你的Google Gemini API金鑰
+     ```
+   - 在程式碼中載入 `.env` 檔案：
+     ```python
+     from dotenv import load_dotenv
+     import os
+
+     load_dotenv()  # 自動載入 .env 檔案
+     api_key = os.getenv('GEMINI_API_KEY')
+     ```
+
+4. **優點**
+   - 提高安全性：敏感資訊不會直接寫在程式碼中。
+   - 易於管理：不同環境（如開發、測試、正式環境）可以使用不同的 `.env` 檔案。
+
 
 ## 3. 組員分工情況
 

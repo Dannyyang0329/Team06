@@ -20,7 +20,7 @@ This project is part of the **Web programming and application** course for Group
 
 4. Pull docker image
     ```bash
-    docker pull yuunnn/team06-web:week13
+    docker pull ytcytc/team06-web:latest
     ```
 
 ## Usage
