@@ -4,7 +4,7 @@
 
 Docker Hub 連結：
 
-https://hub.docker.com/r/yuunnn/team06-web
+https://hub.docker.com/r/ytcytc/team06-web
 
 
 Pull 指令：
@@ -209,7 +209,11 @@ else:
    - 我們使用 `openai` 套件來與 Google Gemini API 進行互動。
    - 在 `consumers.py` 中實作了 `get_gemini_response` 方法，該方法會根據用戶的訊息呼叫 Gemini API 並回傳 AI 的回覆。
 
-3. **程式碼範例**
+3. **聊天歷史功能**
+   - 我們實作了聊天歷史功能，讓每次與 Gemini API 通信時，會將完整的聊天記錄傳遞給 API，確保 AI 能記住對話上下文。
+   - 聊天歷史會包含用戶的所有訊息以及 AI 的回覆，並在每次對話後更新。
+
+4. **程式碼範例**
    以下是 `get_gemini_response` 方法的實作：
    ```python
    async def get_gemini_response(self, user_message):
@@ -221,19 +225,29 @@ else:
            api_key=api_key,
            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
        )
+
+       # 將聊天歷史加入到 messages 中
+       messages = self.chat_history + [
+           {"role": "user", "content": user_message}
+       ]
+
        try:
            response = await sync_to_async(client.chat.completions.create)(
                model="gemini-2.0-flash",
-               messages=[
-                   {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
-                   {"role": "user", "content": user_message}
-               ]
+               messages=messages
            )
-           return response.choices[0].message.content
+           bot_reply = response.choices[0].message.content
+
+           # 將用戶訊息和機器人回覆加入聊天歷史
+           self.chat_history.append({"role": "user", "content": user_message})
+           self.chat_history.append({"role": "assistant", "content": bot_reply})
+
+           return bot_reply
        except Exception as e:
            return f"[AI服務異常] {e}"
-    ```
-
+   ```
+5. 實際聊天範例
+![chat example](assets/chat_example.png)
 
 ## 2. 額外找了與當週上課的主題相關的程式技術
 
