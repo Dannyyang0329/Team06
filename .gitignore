@@ -1,11 +1,12 @@
 # Ignore SQLite database files
-db.sqlite3
+# db.sqlite3
 
 # Ignore Python bytecode cache
 __pycache__/
 *.pyc
 
 run_server.bat
+.env
 
 # Ignore whitenoise created static files
 staticfiles/

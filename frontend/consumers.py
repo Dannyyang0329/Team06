@@ -2,9 +2,14 @@ import uuid
 import json
 import asyncio
 import logging
+import os
+import httpx
 from django.db import transaction
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from datetime import datetime, timedelta, timezone
+from asgiref.sync import sync_to_async
+from openai import OpenAI
 
 # 設置日誌
 logger = logging.getLogger('chat')
@@ -23,6 +28,8 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         logger.info(f"用戶已連接到匹配系統: {self.channel_name}")
         # 將用戶加入匹配組
         await self.channel_layer.group_add("matching_users", self.channel_name)
+        self.match_timeout_task = None
+        self.matched = False
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
@@ -39,6 +46,9 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             # 釋放匹配鎖
             if user_id in matching_lock:
                 del matching_lock[user_id]
+        
+        if hasattr(self, 'match_timeout_task') and self.match_timeout_task:
+            self.match_timeout_task.cancel()
     
     async def receive(self, text_data):
         """接收並處理WebSocket消息"""
@@ -55,14 +65,7 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             logger.info(f"用戶偏好: 性別={user_data.get('preferredGender', 'all')}, 標籤={user_data.get('tags', [])}")
             
             # 儲存或更新用戶資訊
-            user = await self.save_user(
-                user_id=user_data.get('user_id'),
-                nickname=user_data.get('nickname', '匿名用戶'),
-                avatar=user_data.get('avatar', '1'),
-                mood=user_data.get('mood', 'neutral'),
-                gender=user_data.get('gender', 'other'),
-                channel_name=self.channel_name
-            )
+            user = await self.save_user(user_data)
             
             self.user_id = user_data.get('user_id')
             
@@ -78,10 +81,17 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             logger.info(f"當前等待列表人數: {len(waiting_users)}")
             logger.debug(f"目前等待列表用戶: {', '.join([w['user'].nickname for w in waiting_users.values()])}")
             
+            if self.match_timeout_task:
+                self.match_timeout_task.cancel()
+            self.match_timeout_task = asyncio.create_task(self.match_timeout(user_data))
+            
             # 尋找匹配的用戶
             matched_user_id = await self.find_match(self.user_id)
             
             if matched_user_id:
+                self.matched = True
+                if self.match_timeout_task:
+                    self.match_timeout_task.cancel()
                 # 找到匹配，創建聊天室
                 matched_data = waiting_users[matched_user_id]
                 matched_user = matched_data['user']
@@ -133,7 +143,14 @@ class MatchingConsumer(AsyncWebsocketConsumer):
                     del waiting_users[matched_user_id]
                 
                 # 儲存聊天室到資料庫
-                await self.save_chat_room(room_id, user, matched_user)
+                await self.save_chat_room({
+                    'room_id': room_id,
+                    'user1': user.user_id,
+                    'user2': matched_user.user_id
+                })
+                
+                if self.match_timeout_task:
+                    self.match_timeout_task.cancel()
                 
             else:
                 # 沒有找到匹配，通知用戶等待
@@ -228,7 +245,11 @@ class MatchingConsumer(AsyncWebsocketConsumer):
                         del waiting_users[matched_user_id]
                     
                     # 儲存聊天室到資料庫
-                    await self.save_chat_room(room_id, user_data['user'], matched_user)
+                    await self.save_chat_room({
+                        'room_id': room_id,
+                        'user1': user_data['user'].id,
+                        'user2': matched_user.id
+                    })
                 else:
                     # 仍然沒找到匹配，再次檢查
                     logger.info(f"定期檢查未找到匹配，用戶 {user.nickname} 繼續等待")
@@ -237,6 +258,68 @@ class MatchingConsumer(AsyncWebsocketConsumer):
                 logger.debug(f"用戶 {self.user_id} 不再等待配對，取消定期檢查")
         except Exception as e:
             logger.error(f"定期檢查匹配發生錯誤: {str(e)}")
+    
+    async def match_timeout(self, user_data):
+        logger.info(f"[match_timeout] 計時開始 for {getattr(self, 'user_id', None)}")
+        await asyncio.sleep(30)
+        logger.info(f"[match_timeout] 60秒到 for {getattr(self, 'user_id', None)} self.matched={self.matched}")
+        if not self.matched and hasattr(self, 'user_id') and self.user_id in waiting_users:
+            logger.info(f"[match_timeout] 觸發AI bot for {self.user_id}")
+            await self.create_bot_and_match(user_data)
+        else:
+            logger.info(f"[match_timeout] 已配對或已離開，不觸發AI bot for {getattr(self, 'user_id', None)}")
+
+    async def create_bot_and_match(self, user_data):
+        from .serializers import UserSerializer
+
+        self.matched = True
+        bot_id = f"bot_{uuid.uuid4().hex[:8]}"
+        bot_data = {
+            'user_id': bot_id,
+            'nickname': 'AI Assistant',
+            'avatar': '1', #'bot',
+            'mood': 'helpful',
+            'gender': 'other',
+            'channel_name': f'bot_channel_{bot_id}'
+        }
+
+        def create_bot():
+            serializer = UserSerializer(data=bot_data)
+            valid = serializer.is_valid()
+            return valid, serializer
+
+        valid, serializer = await sync_to_async(create_bot)()
+
+        if valid:
+            bot_user = await sync_to_async(serializer.save)()
+            room_id = str(uuid.uuid4())
+            # 建立 chatroom (與真人一致)
+            await self.save_chat_room({
+                'room_id': room_id,
+                'user1': self.user_id,
+                'user2': bot_user.user_id
+            })
+            self.matched_user = {
+                'user_id': bot_user.user_id,
+                'nickname': bot_user.nickname,
+                'avatar': bot_user.avatar,
+                'mood': bot_user.mood,
+                'gender': bot_user.gender
+            }
+            self.room_id = room_id
+            await self.send(text_data=json.dumps({
+                'action': 'match_found',
+                'room_id': room_id,
+                'matched_user': self.matched_user,
+                'is_bot': True
+            }))
+            logger.info(f"[create_bot_and_match] 已送出 match_found 給 user {self.user_id} (bot {bot_user.user_id})，room_id={room_id}")
+            # 從等待池移除自己
+            if hasattr(self, 'user_id') and self.user_id in waiting_users:
+                del waiting_users[self.user_id]
+        else:
+            await self.send(text_data=json.dumps({'action': 'error', 'message': 'AI bot建立失敗'}))
+            logger.error(f"[create_bot_and_match] bot建立失敗: {serializer.errors}")
     
     async def match_notification(self, event):
         """處理匹配通知"""
@@ -312,56 +395,65 @@ class MatchingConsumer(AsyncWebsocketConsumer):
                 del matching_lock[user_id]
     
     @database_sync_to_async
-    def save_user(self, user_id, nickname, avatar, mood, gender, channel_name):
-        """保存用戶信息到資料庫"""
+    def save_user(self, user_data):
         # 延遲匯入模型，確保Django已完全初始化
         from .models import User
-        
-        # 確保user_id不為空，若為空則產生一個格式一致的ID
+        from .serializers import UserSerializer
+        from django.utils.crypto import get_random_string
+
+        # 依照唯一鍵 (這裡假設 user_id 唯一) 先嘗試抓舊資料
+        user_id = user_data.get("user_id")
+        user_instance = None
+        if user_id:
+            try:
+                user_instance = User.objects.get(user_id=user_id)
+            except User.DoesNotExist:
+                user_instance = None
+
+        # 若沒有 user_id 或查無此人，幫他配一個新的
         if not user_id:
-            from django.utils.crypto import get_random_string
-            user_id = f"user-{get_random_string(8)}"
-        
-        user, created = User.objects.update_or_create(
-            user_id=user_id,
-            defaults={
-                'nickname': nickname,
-                'avatar': avatar,
-                'mood': mood,
-                'gender': gender,
-                'channel_name': channel_name
-            }
+            user_data["user_id"] = f"user-{get_random_string(8)}"
+
+        # 建立 serializer：有 instance 就會走 update，沒有就走 create
+        serializer = UserSerializer(
+            instance=user_instance,
+            data=user_data,
+            partial=True  # 允許只傳部分欄位更新
         )
-        if created:
-            logger.info(f"創建新用戶: {nickname} (ID: {user_id})")
+            
+        if serializer.is_valid():
+            user_data = serializer.validated_data
+            # 碮保user_id不為空，若為空則產生一個格式一致的ID
+            if not user_data.get('user_id'):
+                from django.utils.crypto import get_random_string
+                user_data['user_id'] = f"user-{get_random_string(8)}"
+            user = serializer.save()
+            return user
         else:
-            logger.info(f"更新既有用戶: {nickname} (ID: {user_id})")
-        
-        return user
+            logger.error(f"Invalid user data: {serializer.errors}")
+            raise ValueError(f"Invalid user data: {serializer.errors}")
     
     @database_sync_to_async
-    def save_chat_room(self, room_id, user1, user2):
-        """保存聊天室到資料庫"""
-        # 延遲匯入模型，確保Django已完全初始化
-        from .models import ChatRoom
-        
-        try:
-            chat_room = ChatRoom.objects.create(
-                room_id=room_id,
-                user1=user1,
-                user2=user2
-            )
-            logger.info(f"創建新聊天室: {room_id} (用戶: {user1.nickname} 和 {user2.nickname})")
+    def save_chat_room(self, room_data):
+        from .serializers import ChatRoomSerializer
+        print("Save", room_data, flush=True)
+        serializer = ChatRoomSerializer(data=room_data)
+        print("Serialized", room_data, flush=True)
+        if serializer.is_valid():
+            chat_room = serializer.save()
+            logger.info(f"聊天室成功建立: {chat_room.room_id}")
             return chat_room
-        except Exception as e:
-            logger.error(f"創建聊天室失敗: {str(e)}")
-            return None
+        else:
+            logger.error(f"聊天室建立失敗: {serializer.errors}")
+            raise ValueError(f"Invalid chat room data: {serializer.errors}")
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
     """處理聊天的WebSocket消費者"""
     
     async def connect(self):
+        from .models import User, ChatRoom
+
         """處理WebSocket連接"""
         # 從URL查詢參數獲取房間ID
         self.room_id = self.scope['url_route']['kwargs'].get('room', None)
@@ -412,6 +504,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
         
         logger.info(f"用戶已連接到聊天室 {self.room_id}: {self.channel_name}")
+        try:
+            chat_room = await sync_to_async(ChatRoom.objects.get)(room_id=self.room_id)
+            user1 = await sync_to_async(lambda: chat_room.user1)()
+            user2 = await sync_to_async(lambda: chat_room.user2)()
+            if str(user1.user_id).startswith('bot_') or str(user2.user_id).startswith('bot_'):
+                self.is_bot_room = True
+            else:
+                self.is_bot_room = False
+        except Exception as e:
+            logger.error(f"[connect] 查詢聊天室bot user失敗: {e}")
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
@@ -435,17 +537,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # 發送訊息
             message_data = data.get('message')
             user_id = data.get('user_id')
+
+            taipei_tz = timezone(timedelta(hours=8))
+            sent_at = datetime.now(taipei_tz).strftime('%H:%M')
             
             logger.info(f"用戶 {user_id} 發送訊息: {message_data}")
             
             # 儲存訊息到資料庫
-            message = await self.save_message(
-                room_id=self.room_id,
-                user_id=user_id,
-                content=message_data.get('content', ''),
-                replied_to=message_data.get('replied_to'),
-                client_id=message_data.get('client_id')  # 添加接收客戶端ID
-            )
+            message = await self.save_message({
+                'room': self.room_id,
+                'sender': user_id,
+                'content': message_data.get('content', ''),
+                'replied_to': message_data.get('replied_to'),
+                'client_id': message_data.get('client_id')  # 添加接收客戶端ID
+            })
             
             if message:
                 # 獲取回覆訊息的資訊
@@ -465,11 +570,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             'replied_to': replied_info.get('id') if replied_info else None,
                             'replied_to_content': replied_info.get('content') if replied_info else None,
                             'replied_to_sender': replied_info.get('sender') if replied_info else None,
-                            'sent_at': message.sent_at.strftime('%H:%M'),
+                            'sent_at': sent_at,
                             'client_id': message_data.get('client_id')  # 返回客戶端ID
                         }
                     }
                 )
+            
+            # 檢查是否為AI bot聊天室
+            logger.info(f"Is it a bot room? {self.is_bot_room}")
+            if hasattr(self, 'room_id') and self.is_bot_room:
+                logger.info(f"用戶 {user_id} 在AI bot聊天室發送訊息: {message_data}")
+                user_message = data['message']['content']
+                bot_reply = await self.get_gemini_response(user_message)
+                await self.send(text_data=json.dumps({
+                    'action': 'new_message',
+                    'message': {
+                        'id': f'botmsg-{uuid.uuid4().hex[:8]}',
+                        'content': bot_reply,
+                        'sender_id': 'bot',
+                        'sent_at': 'AI',
+                    }
+                }))
+                return
         
         elif action == 'recall_message':
             # 收回訊息
@@ -531,6 +653,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # 更新聊天室狀態
             await self.update_chat_room_inactive(self.room_id)
     
+    async def get_gemini_response(self, user_message):
+        api_key = os.getenv('GEMINI_API_KEY')
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        try:
+            response = await sync_to_async(client.chat.completions.create)(
+                model="gemini-2.0-flash",
+                messages=[
+                    {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
+                    {"role": "user", "content": user_message}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"[AI服務異常] {e}"
+
     async def chat_message(self, event):
         """處理聊天消息事件"""
         logger.debug(f"廣播聊天訊息: {event['message']['id']}")
@@ -565,54 +705,53 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
     
     @database_sync_to_async
-    def save_message(self, room_id, user_id, content, replied_to=None, client_id=None):
-        """儲存訊息到資料庫"""
-        # 延遲匯入模型，確保Django已完全初始化
-        from .models import User, ChatRoom, Message
-        
+    def save_message(self, message_data):
+        from .models import ChatRoom, User, Message
+        from .serializers import MessageSerializer
+
+        # 原本的檢查邏輯
+        room_id = message_data.get('room')
+        user_id = message_data.get('sender')
+        content = message_data.get('content')
+        replied_to = message_data.get('replied_to')
+
+        if not room_id or not user_id or not content:
+            raise ValueError("Missing required fields: room, sender, or content")
+
+        # 確認聊天室是否存在
         try:
-            # 獲取聊天室
             chat_room = ChatRoom.objects.get(room_id=room_id)
-            
-            # 獲取用戶 (直接使用原始user_id，不做轉換)
-            try:
-                user = User.objects.get(user_id=user_id)
-            except User.DoesNotExist:
-                logger.error(f"用戶不存在: {user_id}")
-                return None
-            
-            # 檢查用戶是否屬於該聊天室
-            if user != chat_room.user1 and user != chat_room.user2:
-                logger.error(f"用戶 {user.nickname} 不屬於聊天室 {room_id}")
-                return None
-            
-            # 處理回覆訊息
-            replied_to_msg = None
-            if replied_to:
-                try:
-                    replied_to_msg = Message.objects.get(id=replied_to)
-                    logger.info(f"回覆訊息ID: {replied_to}, 內容: {replied_to_msg.content[:20]}...")
-                except Message.DoesNotExist:
-                    logger.error(f"回覆的訊息不存在: {replied_to}")
-            
-            # 創建新訊息
-            message = Message.objects.create(
-                room=chat_room,
-                sender=user,
-                content=content,
-                replied_to=replied_to_msg,
-                client_id=client_id  # 保存客戶端ID
-            )
-            
-            logger.info(f"保存訊息成功: ID={message.id}, 發送者={user.nickname}, 內容={content[:20]}...")
-            
-            return message
         except ChatRoom.DoesNotExist:
-            logger.error(f"聊天室不存在: {room_id}")
-            return None
-        except Exception as e:
-            logger.error(f"保存訊息時發生錯誤: {str(e)}")
-            return None
+            raise ValueError(f"Chat room {room_id} does not exist")
+
+        # 確認發送者是否存在
+        try:
+            sender = User.objects.get(user_id=user_id)
+        except User.DoesNotExist:
+            raise ValueError(f"Sender {user_id} does not exist")
+
+        # 確認回覆的訊息是否存在（如果有）
+        replied_to_msg = None
+        if replied_to:
+            try:
+                replied_to_msg = Message.objects.get(id=replied_to)
+            except Message.DoesNotExist:
+                raise ValueError(f"Replied-to message {replied_to} does not exist")
+
+        # 使用序列化器進行驗證和儲存
+        serializer = MessageSerializer(data={
+            'room': chat_room.room_id,
+            'sender': sender.user_id,
+            'content': content,
+            'replied_to': replied_to_msg.id if replied_to_msg else None,
+            'client_id': message_data.get('client_id')
+        })
+
+        if serializer.is_valid():
+            message = serializer.save()
+            return message
+        else:
+            raise ValueError(f"Invalid message data: {serializer.errors}")
     
     @database_sync_to_async
     def recall_message(self, message_id, user_id):

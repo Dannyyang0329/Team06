@@ -5,3 +5,8 @@ channels-redis>=4.0.0
 asgiref>=3.7.0
 redis>=4.0.0
 whitenoise>=5.0.0
+djangorestframework>=3.14.0
+djangorestframework-simplejwt
+google-generativeai
+openai
+python-dotenv

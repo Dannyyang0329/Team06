@@ -1,0 +1,109 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登入 - 秘語</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <div class="welcome-screen">
+            <div class="logo">
+                <h1>秘語</h1>
+                <p>歡迎回來</p>
+            </div>
+
+            <div class="auth-form">
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="user_id">
+                            <i class="fas fa-user"></i>
+                            帳號
+                        </label>
+                        <input type="text" id="user_id" name="user_id" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password">
+                            <i class="fas fa-lock"></i>
+                            密碼
+                        </label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+
+                    <button type="submit" class="btn-primary">登入</button>
+                </form>
+
+                <div id="login-message" class="auth-message"></div>
+
+                <div class="auth-links">
+                    <p>還沒有帳號？ <a href="/register/">立即註冊</a></p>
+                    <p>- 或是 -</p>
+                    <a href="/" class="btn-secondary">返回首頁</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check if user is already logged in
+        const token = localStorage.getItem('access_token');
+        if (token) {
+            window.location.href = '/';
+        }
+
+        document.getElementById('login-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const messageDiv = document.getElementById('login-message');
+            const formData = {
+                user_id: document.getElementById('user_id').value,
+                password: document.getElementById('password').value
+            };
+
+            try {
+                const response = await fetch('/api/auth/login/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = '登入成功！';
+                    messageDiv.className = 'auth-message success';
+                    // Store the tokens
+                    if (data.token) {
+                        localStorage.setItem('access_token', data.token.access);
+                        localStorage.setItem('refresh_token', data.token.refresh);
+                        localStorage.setItem('user_id', formData.user_id);
+                    }
+                    // Add redirect message and button
+                    const redirectDiv = document.createElement('div');
+                    redirectDiv.innerHTML = `
+                        <p>3秒後自動跳轉到首頁</p>
+                        <button onclick="window.location.href='/'" class="btn-primary" style="margin-top: 10px;">立即返回首頁</button>
+                    `;
+                    messageDiv.appendChild(redirectDiv);
+                    // Redirect after 3 seconds
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 3000);
+                } else {
+                    messageDiv.textContent = '登入失敗: ' + (data.detail || '帳號或密碼錯誤');
+                    messageDiv.className = 'auth-message error';
+                }
+            } catch (error) {
+                console.error('登入錯誤:', error);
+                messageDiv.textContent = '登入時發生錯誤，請稍後再試';
+                messageDiv.className = 'auth-message error';
+            }
+        });
+    </script>
+</body>
+</html>

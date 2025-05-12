@@ -5,6 +5,7 @@ import subprocess
 import time
 import socket
 import logging
+from dotenv import load_dotenv
 
 # 設置 Django 環境變數 - 在任何 Django 相關導入前設置
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'webhw.settings')
@@ -30,6 +31,7 @@ def run_migrations():
     """執行資料庫遷移"""
     logger.info("執行資料庫遷移...")
     try:
+        subprocess.run([sys.executable, "manage.py", "makemigrations"], check=True)
         subprocess.run([sys.executable, "manage.py", "migrate"], check=True)
         logger.info("資料庫遷移成功!")
     except subprocess.CalledProcessError:
@@ -118,9 +120,14 @@ def main():
     # 步驟4: 收集靜態檔案
     logger.info("\n步驟4: 收集靜態檔案...")
     run_collectstatic()
-    
+
+    load_dotenv()
+    api_key = os.getenv('GEMINI_API_KEY')
+    logger.info(f"Gemini API Key: {api_key}")
+
     # 步驟5: 啟動伺服器 (原本的步驟4)
     start_daphne()
+
 
 if __name__ == "__main__":
     main()

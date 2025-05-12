@@ -4,21 +4,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>秘語 - 匿名交友聊天平台</title>
+    <title>秘語 - 匿名聊天</title>
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="app-container">
+        <header>
+            <div class="logo">秘語</div>
+            <div class="auth-status">
+                <span id="auth-message">未登入</span>
+                <button id="logout-btn" class="btn-secondary" style="display: none;">登出</button>
+            </div>
+        </header>
+
         <!-- 歡迎頁面 -->
         <div class="welcome-screen" id="welcome-screen">
+            
             <div class="logo">
                 <h1>秘語</h1>
                 <p>匿名交友，即刻開始</p>
             </div>
             
             <div class="welcome-buttons">
-                <button id="set-profile" class="btn-primary">設定個人檔案</button>
+                <button id="auth-register" class="btn-secondary">註冊</button>
+                <button id="auth-login" class="btn-secondary">登入</button>
+                <span id="or-text">- 或是 -</span>
+                <button id="set-profile" class="btn-primary">匿名聊天</button>
                 <button id="set-preferences" class="btn-secondary">設定聊天偏好</button>
             </div>
             
@@ -121,7 +133,7 @@
                             <input type="radio" name="gender" value="all" checked>
                             <span class="option-label">所有人</span>
                         </label>
-                        <label class="preference-option">
+                        <label class="preference-option"></label>
                             <input type="radio" name="gender" value="male">
                             <span class="option-label">男生</span>
                         </label>
