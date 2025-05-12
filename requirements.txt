@@ -7,4 +7,6 @@ redis>=4.0.0
 whitenoise>=5.0.0
 djangorestframework>=3.14.0
 djangorestframework-simplejwt
-google-generativeai>=0.3.0
+google-generativeai
+openai
+python-dotenv

@@ -2,10 +2,14 @@ import uuid
 import json
 import asyncio
 import logging
+import os
+import httpx
 from django.db import transaction
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from datetime import datetime, timedelta, timezone
+from asgiref.sync import sync_to_async
+from openai import OpenAI
 
 # 設置日誌
 logger = logging.getLogger('chat')
@@ -24,6 +28,8 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         logger.info(f"用戶已連接到匹配系統: {self.channel_name}")
         # 將用戶加入匹配組
         await self.channel_layer.group_add("matching_users", self.channel_name)
+        self.match_timeout_task = None
+        self.matched = False
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
@@ -40,6 +46,9 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             # 釋放匹配鎖
             if user_id in matching_lock:
                 del matching_lock[user_id]
+        
+        if hasattr(self, 'match_timeout_task') and self.match_timeout_task:
+            self.match_timeout_task.cancel()
     
     async def receive(self, text_data):
         """接收並處理WebSocket消息"""
@@ -72,10 +81,17 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             logger.info(f"當前等待列表人數: {len(waiting_users)}")
             logger.debug(f"目前等待列表用戶: {', '.join([w['user'].nickname for w in waiting_users.values()])}")
             
+            if self.match_timeout_task:
+                self.match_timeout_task.cancel()
+            self.match_timeout_task = asyncio.create_task(self.match_timeout(user_data))
+            
             # 尋找匹配的用戶
             matched_user_id = await self.find_match(self.user_id)
             
             if matched_user_id:
+                self.matched = True
+                if self.match_timeout_task:
+                    self.match_timeout_task.cancel()
                 # 找到匹配，創建聊天室
                 matched_data = waiting_users[matched_user_id]
                 matched_user = matched_data['user']
@@ -132,6 +148,9 @@ class MatchingConsumer(AsyncWebsocketConsumer):
                     'user1': user.user_id,
                     'user2': matched_user.user_id
                 })
+                
+                if self.match_timeout_task:
+                    self.match_timeout_task.cancel()
                 
             else:
                 # 沒有找到匹配，通知用戶等待
@@ -240,6 +259,68 @@ class MatchingConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             logger.error(f"定期檢查匹配發生錯誤: {str(e)}")
     
+    async def match_timeout(self, user_data):
+        logger.info(f"[match_timeout] 計時開始 for {getattr(self, 'user_id', None)}")
+        await asyncio.sleep(6)#0)
+        logger.info(f"[match_timeout] 60秒到 for {getattr(self, 'user_id', None)} self.matched={self.matched}")
+        if not self.matched and hasattr(self, 'user_id') and self.user_id in waiting_users:
+            logger.info(f"[match_timeout] 觸發AI bot for {self.user_id}")
+            await self.create_bot_and_match(user_data)
+        else:
+            logger.info(f"[match_timeout] 已配對或已離開，不觸發AI bot for {getattr(self, 'user_id', None)}")
+
+    async def create_bot_and_match(self, user_data):
+        from .serializers import UserSerializer
+
+        self.matched = True
+        bot_id = f"bot_{uuid.uuid4().hex[:8]}"
+        bot_data = {
+            'user_id': bot_id,
+            'nickname': 'AI Assistant',
+            'avatar': '1', #'bot',
+            'mood': 'helpful',
+            'gender': 'other',
+            'channel_name': f'bot_channel_{bot_id}'
+        }
+
+        def create_bot():
+            serializer = UserSerializer(data=bot_data)
+            valid = serializer.is_valid()
+            return valid, serializer
+
+        valid, serializer = await sync_to_async(create_bot)()
+
+        if valid:
+            bot_user = await sync_to_async(serializer.save)()
+            room_id = str(uuid.uuid4())
+            # 建立 chatroom (與真人一致)
+            await self.save_chat_room({
+                'room_id': room_id,
+                'user1': self.user_id,
+                'user2': bot_user.user_id
+            })
+            self.matched_user = {
+                'user_id': bot_user.user_id,
+                'nickname': bot_user.nickname,
+                'avatar': bot_user.avatar,
+                'mood': bot_user.mood,
+                'gender': bot_user.gender
+            }
+            self.room_id = room_id
+            await self.send(text_data=json.dumps({
+                'action': 'match_found',
+                'room_id': room_id,
+                'matched_user': self.matched_user,
+                'is_bot': True
+            }))
+            logger.info(f"[create_bot_and_match] 已送出 match_found 給 user {self.user_id} (bot {bot_user.user_id})，room_id={room_id}")
+            # 從等待池移除自己
+            if hasattr(self, 'user_id') and self.user_id in waiting_users:
+                del waiting_users[self.user_id]
+        else:
+            await self.send(text_data=json.dumps({'action': 'error', 'message': 'AI bot建立失敗'}))
+            logger.error(f"[create_bot_and_match] bot建立失敗: {serializer.errors}")
+    
     async def match_notification(self, event):
         """處理匹配通知"""
         # 發送匹配結果給客戶端
@@ -342,7 +423,7 @@ class MatchingConsumer(AsyncWebsocketConsumer):
             
         if serializer.is_valid():
             user_data = serializer.validated_data
-            # 確保user_id不為空，若為空則產生一個格式一致的ID
+            # 碮保user_id不為空，若為空則產生一個格式一致的ID
             if not user_data.get('user_id'):
                 from django.utils.crypto import get_random_string
                 user_data['user_id'] = f"user-{get_random_string(8)}"
@@ -371,6 +452,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
     """處理聊天的WebSocket消費者"""
     
     async def connect(self):
+        from .models import User, ChatRoom
+
         """處理WebSocket連接"""
         # 從URL查詢參數獲取房間ID
         self.room_id = self.scope['url_route']['kwargs'].get('room', None)
@@ -421,6 +504,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.accept()
         
         logger.info(f"用戶已連接到聊天室 {self.room_id}: {self.channel_name}")
+        try:
+            chat_room = await sync_to_async(ChatRoom.objects.get)(room_id=self.room_id)
+            user1 = await sync_to_async(lambda: chat_room.user1)()
+            user2 = await sync_to_async(lambda: chat_room.user2)()
+            if str(user1.user_id).startswith('bot_') or str(user2.user_id).startswith('bot_'):
+                self.is_bot_room = True
+            else:
+                self.is_bot_room = False
+        except Exception as e:
+            logger.error(f"[connect] 查詢聊天室bot user失敗: {e}")
     
     async def disconnect(self, close_code):
         """處理WebSocket斷開連接"""
@@ -482,6 +575,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         }
                     }
                 )
+            
+            # 檢查是否為AI bot聊天室
+            logger.info(f"Is it a bot room? {self.is_bot_room}")
+            if hasattr(self, 'room_id') and self.is_bot_room:
+                logger.info(f"用戶 {user_id} 在AI bot聊天室發送訊息: {message_data}")
+                user_message = data['message']['content']
+                bot_reply = await self.get_gemini_response(user_message)
+                await self.send(text_data=json.dumps({
+                    'action': 'new_message',
+                    'message': {
+                        'id': f'botmsg-{uuid.uuid4().hex[:8]}',
+                        'content': bot_reply,
+                        'sender_id': 'bot',
+                        'sent_at': 'AI',
+                    }
+                }))
+                return
         
         elif action == 'recall_message':
             # 收回訊息
@@ -543,6 +653,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # 更新聊天室狀態
             await self.update_chat_room_inactive(self.room_id)
     
+    async def get_gemini_response(self, user_message):
+        api_key = os.getenv('GEMINI_API_KEY')
+        client = OpenAI(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        try:
+            response = await sync_to_async(client.chat.completions.create)(
+                model="gemini-2.0-flash",
+                messages=[
+                    {"role": "system", "content": "你是一個交友網站裡的線上聊天機器人。請用繁體中文回答，每次不超過100個字。"},
+                    {"role": "user", "content": user_message}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"[AI服務異常] {e}"
+
     async def chat_message(self, event):
         """處理聊天消息事件"""
         logger.debug(f"廣播聊天訊息: {event['message']['id']}")

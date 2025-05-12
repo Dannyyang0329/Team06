@@ -6,6 +6,7 @@ __pycache__/
 *.pyc
 
 run_server.bat
+.env
 
 # Ignore whitenoise created static files
 staticfiles/
