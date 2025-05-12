@@ -1,5 +1,5 @@
 # Ignore SQLite database files
-db.sqlite3
+# db.sqlite3
 
 # Ignore Python bytecode cache
 __pycache__/
