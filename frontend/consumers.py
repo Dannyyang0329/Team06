@@ -261,7 +261,7 @@ class MatchingConsumer(AsyncWebsocketConsumer):
     
     async def match_timeout(self, user_data):
         logger.info(f"[match_timeout] 計時開始 for {getattr(self, 'user_id', None)}")
-        await asyncio.sleep(6)#0)
+        await asyncio.sleep(30)
         logger.info(f"[match_timeout] 60秒到 for {getattr(self, 'user_id', None)} self.matched={self.matched}")
         if not self.matched and hasattr(self, 'user_id') and self.user_id in waiting_users:
             logger.info(f"[match_timeout] 觸發AI bot for {self.user_id}")
